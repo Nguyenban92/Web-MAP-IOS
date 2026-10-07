@@ -1,0 +1,14 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>THOVE-NB · Quản lý key</title><link rel="stylesheet" href="/admin.css"></head><body>
+<div id="login" class="login"><form id="loginForm"><img src="/thove-nb-logo.jpg" alt="THOVE-NB"><h1>THOVE-NB</h1><p>CONTROL CENTER</p><label>ADMIN_KEY<input id="adminKey" type="password" autocomplete="current-password" required></label><button>Đăng nhập quản trị</button><span id="loginError" role="alert"></span></form></div>
+<div id="app" class="app" hidden>
+ <aside><div class="brand"><img src="/thove-nb-logo.jpg" alt="THOVE-NB"><div><b>THOVE-NB</b><span>CONTROL CENTER</span></div></div><nav><a class="active">⌁ Quản lý key</a><a href="/">◉ Trang người xem</a></nav><button id="logout" class="logout">Đăng xuất</button></aside>
+ <main><header><div><h1>Quản lý key người phát</h1><p>Tạo, khóa và quản lý thời hạn sử dụng cho từng người.</p></div><button id="newKey" class="primary">＋ Tạo key mới</button></header>
+ <section class="stats"><div><span>TỔNG SỐ KEY</span><b id="total">0</b></div><div><span>ĐANG HOẠT ĐỘNG</span><b id="active">0</b></div><div><span>SẮP HẾT HẠN</span><b id="expiring">0</b></div></section>
+ <div class="tools"><input id="search" type="search" placeholder="Tìm theo tên hoặc ghi chú..."><select id="filter"><option value="all">Tất cả trạng thái</option><option value="active">Đang hoạt động</option><option value="locked">Đã khóa / hết hạn</option></select><button id="refresh">Làm mới</button></div>
+ <div class="table"><div class="row head"><span>NGƯỜI SỬ DỤNG</span><span>KEY ĐĂNG NHẬP</span><span>HẠN SỬ DỤNG</span><span>TRẠNG THÁI</span><span></span></div><div id="rows"></div></div>
+ <p id="sync" class="sync" role="status">Đang đồng bộ Google Sheets…</p>
+ </main>
+</div>
+<dialog id="editor"><form id="keyForm" method="dialog"><header><h2 id="editorTitle">Tạo key mới</h2><button id="closeEditor" type="button" aria-label="Đóng">×</button></header><input id="editId" type="hidden"><label>Tên người sử dụng<input id="editName" maxlength="80" required></label><label>Ghi chú<input id="editNote" maxlength="200"></label><label>Ngày hết hạn<input id="editExpiry" type="date"></label><div class="dialog-actions"><button id="cancelEditor" type="button">Hủy</button><button class="primary">Lưu key</button></div></form></dialog>
+<dialog id="created"><div class="created"><h2>Đã tạo key mới</h2><p>Chỉ gửi phần key bên dưới cho người sử dụng.</p><code id="createdKey"></code><button id="copyKey" class="primary">Sao chép key</button><button id="closeCreated">Đóng</button></div></dialog>
+<script src="/admin.js"></script></body></html>

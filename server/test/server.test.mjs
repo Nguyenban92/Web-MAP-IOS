@@ -78,3 +78,22 @@ test('separate publisher keys create isolated single active rooms', async t => {
   assert.throws(() => parsePublisherKeys('bad=x'), /at least 24/);
   assert.throws(() => parsePublisherKeys(`same=${alice};same=${bob}`), /duplicate/);
 });
+test('Google Sheets key manager authorizes publishers and protects admin routes', async t => {
+  const managedSecret = 'NB-managed-publisher-key-1234567890';
+  let records = [{ id:'0123456789abcdef', name:'Alice', key:managedSecret, note:'', expiresAt:'', enabled:true }];
+  const keyStore = {
+    list: async () => records,
+    authorize: async value => value === managedSecret && records[0]?.enabled ? { id:'sheet:0123456789abcdef', admin:false } : null,
+    create: async input => ({ id:'fedcba9876543210', key:'NB-new-managed-key-1234567890123456', enabled:true, ...input }),
+    update: async (id, changes) => (records[0] = { ...records[0], ...changes, id }),
+    remove: async () => { records = []; }
+  };
+  const { call } = await fixture(t, { keyStore });
+  assert.equal((await call('/api/admin/keys', 'GET', 'wrong')).status, 401);
+  assert.equal((await call('/api/admin/keys', 'GET', key)).status, 200);
+  assert.equal((await call('/api/rooms', 'POST', managedSecret, JSON.stringify({ password:'' }))).status, 201);
+  assert.equal((await call('/api/admin/keys', 'POST', key, JSON.stringify({ name:'Bob' }))).status, 201);
+  assert.equal((await call('/api/admin/keys/0123456789abcdef', 'PATCH', key, JSON.stringify({ enabled:false }))).status, 200);
+  assert.equal((await call('/api/rooms', 'POST', managedSecret, JSON.stringify({ password:'' }))).status, 401);
+  assert.equal((await call('/api/admin/keys/0123456789abcdef', 'DELETE', key)).status, 204);
+});

@@ -1,4 +1,5 @@
 import { createRTC } from './rtc.mjs';
+import { createKeyStore } from './key-store.mjs';
 import http from 'node:http';
 import { randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
@@ -28,22 +29,26 @@ async function body(req, max) {
   for await (const chunk of req) { size += chunk.length; if (size > max) throw fail(413, 'Payload too large'); chunks.push(chunk); }
   return Buffer.concat(chunks);
 }
-export function createApp({ adminKey, publisherKeys = '', publicURL, now = Date.now, lease = 180000, startupLease = 600000, iceServers, turnURLs, turnSecret } = {}) {
+export function createApp({ adminKey, publisherKeys = '', publicURL, now = Date.now, lease = 180000, startupLease = 600000, iceServers, turnURLs, turnSecret, keyStore, keyStoreURL, keyStoreSecret, fetchImpl } = {}) {
   if (!adminKey || adminKey.length < 24) throw Error('ADMIN_KEY must contain at least 24 characters');
   const publishers = publisherKeys instanceof Map ? publisherKeys : parsePublisherKeys(publisherKeys);
   for (const secret of publishers.values()) if (same(secret, adminKey)) throw Error('A publisher key must not equal ADMIN_KEY');
   const base = new URL(publicURL);
   if (base.protocol !== 'https:' || base.pathname !== '/' || base.search || base.hash || base.username || base.password) throw Error('PUBLIC_URL must be an HTTPS origin');
   const rooms = new Map(), rates = new Map(), pairs = new Map();
-  function publisherFor(secret) {
+  const managedKeys = keyStore === undefined ? createKeyStore({ url: keyStoreURL, secret: keyStoreSecret, now, fetchImpl }) : keyStore;
+  async function publisherFor(secret) {
     if (same(secret, adminKey)) return { id: 'admin', admin: true };
     for (const [id, value] of publishers) if (same(secret, value)) return { id, admin: false };
-    return null;
+    return managedKeys ? managedKeys.authorize(secret) : null;
   }
   const assets = new Map([
     ['/', ['index.html', 'text/html; charset=utf-8']],
     ['/viewer.js', ['viewer.js', 'text/javascript; charset=utf-8']],
     ['/style.css', ['style.css', 'text/css; charset=utf-8']],
+    ['/admin', ['admin.html', 'text/html; charset=utf-8']],
+    ['/admin.css', ['admin.css', 'text/css; charset=utf-8']],
+    ['/admin.js', ['admin.js', 'text/javascript; charset=utf-8']],
     ['/thove-nb-logo.jpg', ['thove-nb-logo.jpg', 'image/jpeg']]
   ]);
   // A broadcasting room has no fixed lifetime. It closes only when the app
@@ -84,9 +89,33 @@ export function createApp({ adminKey, publisherKeys = '', publicURL, now = Date.
         res.end(await readFile(new URL(`public/${name}`, import.meta.url))); return;
       }
       if (path === '/health' && req.method === 'GET') { send(200, { ok: true }); return; }
+      const adminMatch = /^\/api\/admin\/keys(?:\/([a-f0-9]{16}))?$/.exec(path);
+      if (adminMatch) {
+        limited('admin:' + req.socket.remoteAddress, 90, 60000);
+        if (!same(bearer(req), adminKey)) throw fail(401, 'Sai ADMIN_KEY');
+        if (!managedKeys) throw fail(503, 'Chưa cấu hình Google Sheets');
+        const keyId = adminMatch[1];
+        if (!keyId && req.method === 'GET') { send(200, { keys: await managedKeys.list(true) }); return; }
+        if (!keyId && req.method === 'POST') {
+          let input; try { input = JSON.parse((await body(req, 4096)).toString()); } catch { throw fail(400, 'Dữ liệu không hợp lệ'); }
+          send(201, { key: await managedKeys.create(input) }); return;
+        }
+        if (keyId && req.method === 'PATCH') {
+          let input; try { input = JSON.parse((await body(req, 4096)).toString()); } catch { throw fail(400, 'Dữ liệu không hợp lệ'); }
+          const record = await managedKeys.update(keyId, input);
+          if (input.enabled === false) for (const [roomId, room] of rooms) if (room.owner === `sheet:${keyId}`) rooms.delete(roomId);
+          send(200, { key: record }); return;
+        }
+        if (keyId && req.method === 'DELETE') {
+          await managedKeys.remove(keyId);
+          for (const [roomId, room] of rooms) if (room.owner === `sheet:${keyId}`) rooms.delete(roomId);
+          send(204); return;
+        }
+        throw fail(405, 'Method not allowed');
+      }
       if (path === '/api/rooms' && req.method === 'POST') {
         limited('create:' + req.socket.remoteAddress, 20, 60000);
-        const publisher = publisherFor(bearer(req));
+        const publisher = await publisherFor(bearer(req));
         if (!publisher) throw fail(401, 'Unauthorized');
         cleanup(); if (rooms.size >= 25) throw fail(503, 'Room limit reached');
         if (!publisher.admin && [...rooms.values()].some(room => room.owner === publisher.id)) throw fail(409, 'This publisher already has an active room');
@@ -192,6 +221,6 @@ export function createApp({ adminKey, publisherKeys = '', publicURL, now = Date.
   return server;
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const app = createApp({ adminKey: process.env.ADMIN_KEY, publisherKeys: process.env.PUBLISHER_KEYS, publicURL: process.env.PUBLIC_URL, iceServers: process.env.ICE_SERVERS_JSON ? JSON.parse(process.env.ICE_SERVERS_JSON) : undefined, turnURLs: process.env.TURN_URLS?.split(',').filter(Boolean), turnSecret: process.env.TURN_SECRET });
+  const app = createApp({ adminKey: process.env.ADMIN_KEY, publisherKeys: process.env.PUBLISHER_KEYS, publicURL: process.env.PUBLIC_URL, keyStoreURL: process.env.KEY_STORE_URL, keyStoreSecret: process.env.KEY_STORE_SECRET, iceServers: process.env.ICE_SERVERS_JSON ? JSON.parse(process.env.ICE_SERVERS_JSON) : undefined, turnURLs: process.env.TURN_URLS?.split(',').filter(Boolean), turnSecret: process.env.TURN_SECRET });
   app.listen(Number(process.env.PORT || 8080), '0.0.0.0', () => console.log('NB Web Map listening'));
 }

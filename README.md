@@ -2,6 +2,8 @@
 
 Mã nguồn app iPhone phát một vùng màn hình sang một iPhone khác, xem trong cửa sổ PiP khi chơi game. iOS 16+. Đây là bản triển khai cần kiểm thử thiết bị, không phải IPA đã biên dịch hay sản phẩm đã nghiệm thu.
 
+Trang quản lý key riêng nằm tại `/admin`, hỗ trợ tạo, sửa, khóa, mở khóa, xóa và đặt ngày hết hạn qua Google Sheets. Xem `SETUP-KEY-MANAGER.md`. Tính năng này không thay đổi ứng dụng iPhone hoặc luồng WebRTC hiện tại.
+
 ## Thay đổi
 
 - WebRTC truyền video thay chuỗi JPEG; ưu tiên H.264, có codec dự phòng.
