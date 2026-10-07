@@ -1,0 +1,13 @@
+KÝ NB WEB MAP 0.3
+
+Workflow tạo IPA unsigned. Ký cả Payload/NBWebMap.app và PlugIns/Broadcast.appex.
+App Bundle ID: vn.nguyenban.nbwebmap (hoặc ID đã chọn khi chạy workflow).
+Extension Bundle ID: <App Bundle ID>.Broadcast.
+Mỗi thành phần cần application-identifier và provisioning profile phù hợp Bundle ID của nó; cùng team ký. Không ép app và extension thành cùng một Bundle ID/application-identifier. Không xóa PlugIns.
+
+Bản này không yêu cầu App Groups, dùng mã QR một lần để khởi động Broadcast.
+Bỏ App Groups KHÔNG sửa được profile/chữ ký extension không hợp lệ.
+Chứng chỉ mua có thể không đủ khả năng ký extension theo cấu hình này; chỉ cài được app chưa chứng minh Broadcast chạy được.
+
+Sau cài, mở app và kiểm tra NB Map Broadcast có xuất hiện trong nút phát hệ thống, có đếm ngược và thực sự chạy không. Nếu không có trong danh sách, kiểm tra ký/đóng gói trước khi chỉnh máy chủ.
+Không cung cấp chứng chỉ, mật khẩu hoặc UDID công khai để xử lý lỗi.

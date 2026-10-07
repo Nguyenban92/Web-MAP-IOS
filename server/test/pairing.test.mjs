@@ -1,0 +1,25 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { createApp } from '../server.mjs';
+test('pairing requires publisher, validates crop, expires, single-use and revokes on close', async t => {
+ let clock = 100000;
+ const app = createApp({adminKey:'a'.repeat(32),publicURL:'https://map.example.com',now:()=>clock});
+ await new Promise(r=>app.listen(0,'127.0.0.1',r)); t.after(()=>new Promise(r=>{app.close(r);app.closeAllConnections()}));
+ const base='http://127.0.0.1:'+app.address().port;
+ const call=(path,method='GET',key='',body)=>fetch(base+path,{method,headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
+ const room=await (await call('/api/rooms','POST','a'.repeat(32),{password:''})).json();
+ const path='/api/rooms/'+room.id;
+ const config={crop:{x:0,y:0,width:0.2,height:0.4,referenceAspect:2.16},fps:6,quality:0.7};
+ assert.equal((await call(path+'/pair','POST','wrong',config)).status,401);
+ assert.equal((await call(path+'/pair','POST',room.publishToken,{...config,crop:{...config.crop,width:2}})).status,400);
+ const make=async()=>{const r=await call(path+'/pair','POST',room.publishToken,config);assert.equal(r.status,201);return new URL((await r.json()).pairURL).hash.slice(6)};
+ const key=await make();let r=await call('/api/pair','POST',key);assert.equal(r.status,200);
+ const c=await r.json();assert.equal(c.room.publishToken,room.publishToken);assert.equal(c.server,'https://map.example.com');assert.deepEqual(c.crop,config.crop);
+ assert.equal((await call('/api/pair','POST',key)).status,404);
+ assert.equal((await call(path+'/status','GET','wrong')).status,401);
+ assert.equal((await (await call(path+'/status','GET',room.publishToken)).json()).paired,true);
+ const old=await make();const fresh=await make();assert.equal((await call('/api/pair','POST',old)).status,404);
+ clock+=90001;assert.equal((await call('/api/pair','POST',fresh)).status,404);
+ const closing=await make();assert.equal((await call(path,'DELETE',room.publishToken)).status,204);
+ assert.equal((await call('/api/pair','POST',closing)).status,404);
+});

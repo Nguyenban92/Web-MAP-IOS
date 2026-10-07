@@ -1,0 +1,13 @@
+NB WEB MAP 0.3 — MÃ NGUỒN WEBRTC, CHƯA PHẢI IPA
+
+1. Đưa NỘI DUNG thư mục này lên gốc repository GitHub, giữ cả .github.
+2. Actions > Build NB Web Map IPA > Run workflow.
+3. Khi build xanh, tải NB-Web-Map-IPA, lấy IPA unsigned để ký.
+4. Phải ký được cả app và Broadcast.appex. Xem SIGNING.txt.
+5. Triển khai server/ với Node 22+ và HTTPS. Đọc README.md về biến môi trường.
+6. Máy phát chọn vùng, tạo phòng và ghép QR. Máy xem dán link, đợi hình, mở PiP.
+7. Chạy DEVICE-TEST.md trên hai iPhone thật.
+
+Mặc định 30 fps/Cân bằng. 60 fps chưa được đo trên máy thật.
+Không có máy chủ/TURN được triển khai sẵn. Mạng khác nhau có thể cần TURN.
+Không thể đảm bảo miễn phí vô hạn hoặc chứng chỉ ESign hiện tại hỗ trợ Broadcast.

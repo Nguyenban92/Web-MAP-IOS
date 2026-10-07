@@ -1,0 +1,5 @@
+WebRTC iOS binary distribution: https://github.com/stasel/WebRTC
+Pinned release: 154.0.0
+Upstream: https://webrtc.googlesource.com/src/
+Upstream license: https://webrtc.googlesource.com/src/+/refs/heads/main/LICENSE
+The source archive does not bundle WebRTC binaries. Swift Package Manager retrieves the dependency during build. Preserve and review upstream license/third-party notices when distributing compiled binaries.

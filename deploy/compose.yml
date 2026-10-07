@@ -1,0 +1,26 @@
+services:
+  app:
+    build: ../server
+    restart: unless-stopped
+    environment:
+      ADMIN_KEY: ${ADMIN_KEY:?Set ADMIN_KEY}
+      PUBLIC_URL: https://${DOMAIN:?Set DOMAIN}
+      PORT: 8080
+      TURN_URLS: ${TURN_URLS:-}
+      TURN_SECRET: ${TURN_SECRET:-}
+    expose: ["8080"]
+    mem_limit: 512m
+  proxy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [app]
+volumes:
+  caddy_data:
+  caddy_config:
