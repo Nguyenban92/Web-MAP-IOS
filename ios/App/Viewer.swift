@@ -134,6 +134,10 @@ final class ViewerEngine:NSObject,ObservableObject,AVPictureInPictureSampleBuffe
     func startPiP() {
         guard hasFrame,let pip=pip else{message="Đợi có hình trước khi bật PiP.";return}
         guard pip.isPictureInPicturePossible else{message="iOS chưa sẵn sàng PiP. Đợi có hình rồi thử lại.";return}
+        // This is a live feed, not seekable media. Reassert immediately before
+        // presentation so the system PiP UI omits the ±10-second controls.
+        pip.requiresLinearPlayback=true
+        pip.invalidatePlaybackState()
         pip.startPictureInPicture()
     }
     func stop() {
@@ -148,7 +152,7 @@ final class ViewerEngine:NSObject,ObservableObject,AVPictureInPictureSampleBuffe
         try? AVAudioSession.sharedInstance().setActive(false,options:.notifyOthersOnDeactivation)
     }
     func pictureInPictureController(_ pictureInPictureController:AVPictureInPictureController,setPlaying playing:Bool){paused = !playing;if paused{blank()};pip?.invalidatePlaybackState()}
-    func pictureInPictureControllerTimeRangeForPlayback(_ pictureInPictureController:AVPictureInPictureController)->CMTimeRange{CMTimeRange(start:.zero,duration:.positiveInfinity)}
+    func pictureInPictureControllerTimeRangeForPlayback(_ pictureInPictureController:AVPictureInPictureController)->CMTimeRange{CMTimeRange(start:.negativeInfinity,duration:.positiveInfinity)}
     func pictureInPictureControllerIsPlaybackPaused(_ pictureInPictureController:AVPictureInPictureController)->Bool{paused}
     func pictureInPictureController(_ pictureInPictureController:AVPictureInPictureController,didTransitionToRenderSize newRenderSize:CMVideoDimensions){}
     func pictureInPictureController(_ pictureInPictureController:AVPictureInPictureController,skipByInterval skipInterval:CMTime,completion completionHandler:@escaping()->Void){completionHandler()}
