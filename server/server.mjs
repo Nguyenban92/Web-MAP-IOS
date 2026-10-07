@@ -14,7 +14,7 @@ async function body(req, max) {
   for await (const chunk of req) { size += chunk.length; if (size > max) throw fail(413, 'Payload too large'); chunks.push(chunk); }
   return Buffer.concat(chunks);
 }
-export function createApp({ adminKey, publicURL, now = Date.now, roomTTL = 7200000, lease = 90000, startupLease = 600000, iceServers, turnURLs, turnSecret } = {}) {
+export function createApp({ adminKey, publicURL, now = Date.now, lease = 180000, startupLease = 600000, iceServers, turnURLs, turnSecret } = {}) {
   if (!adminKey || adminKey.length < 24) throw Error('ADMIN_KEY must contain at least 24 characters');
   const base = new URL(publicURL);
   if (base.protocol !== 'https:' || base.pathname !== '/' || base.search || base.hash || base.username || base.password) throw Error('PUBLIC_URL must be an HTTPS origin');
@@ -24,7 +24,15 @@ export function createApp({ adminKey, publicURL, now = Date.now, roomTTL = 72000
     ['/viewer.js', ['viewer.js', 'text/javascript; charset=utf-8']],
     ['/style.css', ['style.css', 'text/css; charset=utf-8']]
   ]);
-  function expired(room) { const publisher=Math.max(0,...(room.rtcSlots||[]).map(x=>x.publisherAt||0));return now()-room.created>roomTTL||(Math.max(room.lastFrame,publisher)?now()-Math.max(room.lastFrame,publisher)>lease:now()-room.created>startupLease); }
+  // A broadcasting room has no fixed lifetime. It closes only when the app
+  // explicitly deletes it or publisher activity has been absent for `lease`.
+  function expired(room) {
+    const publisher = Math.max(0, ...(room.rtcSlots || []).map(x => x.publisherAt || 0));
+    const lastPublisherActivity = Math.max(room.lastFrame, publisher);
+    return lastPublisherActivity
+      ? now() - lastPublisherActivity > lease
+      : now() - room.created > startupLease;
+  }
   function cleanup() {
     for (const [id, r] of rooms) {
       if (expired(r)) rooms.delete(id);

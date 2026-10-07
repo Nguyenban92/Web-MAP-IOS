@@ -47,7 +47,7 @@ Thiết lập biến môi trường trước khi chạy:
 | ICE_SERVERS_JSON | Tùy chọn: mảng ICE servers thay danh sách STUN mặc định |
 
 Tạo khóa: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
-Health check: `GET /health` trả `{"ok":true}`. Chỉ chạy một instance, dữ liệu phòng ở RAM; restart sẽ đóng phòng. Phòng hết hạn sau 2 giờ hoặc mất publisher heartbeat quá 90 giây, thời gian chờ bắt đầu 10 phút.
+Health check: `GET /health` trả `{"ok":true}`. Chỉ chạy một instance, dữ liệu phòng ở RAM; restart sẽ đóng phòng. Phòng không tự hết hạn khi publisher vẫn đang phát; phòng chỉ đóng khi người phát chủ động đóng hoặc mất publisher heartbeat quá 3 phút. Thời gian chờ bắt đầu phát là 10 phút.
 
 Nếu đã có VPS/tên miền: trong `deploy`, chép `.env.example` thành `.env`, điền thông tin rồi `docker compose up -d --build`. Caddy cần cổng 80/443. Không commit `.env`.
 

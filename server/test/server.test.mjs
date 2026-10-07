@@ -33,7 +33,7 @@ test('create requires admin; protected viewer, independent rooms, close revokes 
   assert.equal((await call(path, 'GET', access.token)).status, 404);
   assert.equal((await call(path, 'POST', r.publishToken, jpeg, 'image/jpeg')).status, 404);
 });
-test('stale image hidden, idle room expires, startup grace expires', async t => {
+test('active room has no fixed lifetime, stale publisher expires after three minutes, startup grace expires', async t => {
   let clock = 100000;
   const { call, create, view } = await fixture(t, { now: () => clock });
   const r = await create();
@@ -42,7 +42,14 @@ test('stale image hidden, idle room expires, startup grace expires', async t => 
   assert.equal((await call(path, 'POST', r.publishToken, Buffer.from([255,216,255,217]), 'image/jpeg')).status, 204);
   clock += 10001;
   assert.equal((await call(path, 'GET', access.token)).status, 204);
-  clock += 90000;
+  // A room can remain live well beyond the old two-hour cap while the
+  // publisher continues to heartbeat.
+  assert.equal((await call(`/api/rooms/${r.id}/rtc?slot=0`, 'GET', r.publishToken)).status, 200);
+  for (let i = 0; i < 130; i++) {
+    clock += 60 * 1000;
+    assert.equal((await call(`/api/rooms/${r.id}/rtc?slot=0`, 'GET', r.publishToken)).status, 200);
+  }
+  clock += 180001;
   assert.equal((await call(path, 'GET', access.token)).status, 404);
   const neverStarted = await create(); clock += 600001;
   assert.equal((await view(neverStarted)).status, 404);
