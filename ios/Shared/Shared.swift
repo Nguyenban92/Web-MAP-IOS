@@ -6,6 +6,10 @@ struct Crop: Codable, Equatable {
     var width: Double = 0.23
     var height: Double = 0.40
     var referenceAspect: Double = 2.16
+    // Some landscape games expose ReplayKit frames in the opposite physical
+    // device orientation from the screenshot used by the crop editor.
+    // Optional keeps configurations made by older app versions compatible.
+    var rotate180: Bool? = true
     var valid: Bool {
         [x, y, width, height, referenceAspect].allSatisfy { $0.isFinite } &&
         x >= 0 && y >= 0 && width >= 0.02 && height >= 0.02 &&

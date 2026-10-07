@@ -129,7 +129,7 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     HStack {
                         Image(systemName: "map.fill").font(.largeTitle).foregroundStyle(.mint)
-                        VStack(alignment: .leading) { Text("THOVE-NB").font(.title2.bold()); Text("Bản đồ trực tiếp • WebRTC 0.4").font(.caption).foregroundStyle(.secondary) }
+                        VStack(alignment: .leading) { Text("THOVE-NB").font(.title2.bold()); Text("Bản đồ trực tiếp • WebRTC 0.5").font(.caption).foregroundStyle(.secondary) }
                     }
                     Text("Phát vùng màn hình • Ghép nối không cần App Groups").font(.caption).foregroundStyle(.mint)
                     GroupBox("1. Máy chủ") {
@@ -151,6 +151,11 @@ struct ContentView: View {
                                 Spacer()
                                 Button("Góc phải") { model.crop.x = max(0, 0.99 - model.crop.width); model.crop.y = 0.02; model.crop.height = min(model.crop.height, 0.98) }
                             }
+                            Toggle("Đảo hướng phát 180°", isOn: Binding(
+                                get: { model.crop.rotate180 ?? true },
+                                set: { model.crop.rotate180 = $0 }
+                            ))
+                            Text("Bật nếu vùng phát nằm ở góc đối diện vùng đã chọn. Với iPhone này nên để bật.").font(.caption).foregroundStyle(.secondary)
                             HStack { Text("Khung/giây"); Spacer(); Text("\(Int(model.fps)) fps") }
                             Picker("FPS mục tiêu", selection: $model.fps) { Text("15").tag(15.0); Text("30").tag(30.0); Text("60").tag(60.0) }.pickerStyle(.segmented)
                             HStack { Text("Chất lượng"); Spacer(); Text("\(Int(model.quality * 100))%") }
@@ -257,7 +262,7 @@ struct RootView: View {
         TabView {
             ContentView().tabItem { Label("Phát", systemImage: "dot.radiowaves.left.and.right") }
             ViewerView().tabItem { Label("Xem / PiP", systemImage: "pip") }
-            NavigationStack { ScrollView { Text("THOVE-NB 0.4\nNguyễn Bân\n\nMáy phát: chọn ảnh game, căn vùng, lưu và tạo phòng. Bấm Chuẩn bị rồi chọn THOVE-NB Broadcast.\n\nTối đa 4 người xem dùng chung link và mật khẩu. Mỗi người mở PiP riêng.\n\nChỉnh vùng: dừng Broadcast, lưu vùng mới rồi tạo mã khởi động mới. Không truyền âm thanh. Hai mạng khó xuyên NAT có thể cần TURN.").padding() }.navigationTitle("Hướng dẫn") }.tabItem { Label("Hướng dẫn", systemImage: "questionmark.circle") }
+            NavigationStack { ScrollView { Text("THOVE-NB 0.5\nNguyễn Bân\n\nMáy phát: chọn ảnh game, căn vùng, lưu và tạo phòng. Bấm Chuẩn bị rồi chọn THOVE-NB Broadcast.\n\nNếu hình phát nằm ở góc đối diện vùng đã chọn, bật Đảo hướng phát 180°.\n\nTối đa 4 người xem dùng chung link và mật khẩu. Mỗi người mở PiP riêng.\n\nChỉnh vùng: dừng Broadcast, lưu vùng mới rồi tạo mã khởi động mới. Không truyền âm thanh. Hai mạng khó xuyên NAT có thể cần TURN.").padding() }.navigationTitle("Hướng dẫn") }.tabItem { Label("Hướng dẫn", systemImage: "questionmark.circle") }
         }.tint(.mint)
     }
 }

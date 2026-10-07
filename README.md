@@ -1,4 +1,4 @@
-# THOVE-NB 0.4 — WebRTC
+# THOVE-NB 0.5 — WebRTC
 
 Mã nguồn app iPhone phát một vùng màn hình sang một iPhone khác, xem trong cửa sổ PiP khi chơi game. iOS 16+. Đây là bản triển khai cần kiểm thử thiết bị, không phải IPA đã biên dịch hay sản phẩm đã nghiệm thu.
 
@@ -10,7 +10,8 @@ Mã nguồn app iPhone phát một vùng màn hình sang một iPhone khác, xem
 - WebRTC tự điều chỉnh theo mạng, giới hạn bitrate khoảng 1,06–1,76 Mbps theo mức chọn. Giảm tối đa còn 15 fps khi máy báo nóng nghiêm trọng.
 - Hàng đợi khung hình giới hạn, pool bộ đệm giới hạn; tránh tích lũy hình cũ.
 - Native PiP, số FPS nhận, RTT và chỉ báo P2P/TURN; không truyền âm thanh.
-- Một máy xem mỗi phòng. Tự thương lượng lại khi đường truyền lỗi; ẩn hình cũ sau khoảng 3 giây, dừng phiên khi mất máy chủ quá 15 giây.
+- Tối đa bốn máy xem mỗi phòng. Tự thương lượng lại khi đường truyền lỗi; ẩn hình cũ sau khoảng 3 giây, dừng phiên khi mất máy chủ quá 15 giây.
+- Có tùy chọn Đảo hướng phát 180° để khớp vùng cắt khi game và ảnh mẫu dùng hai hướng cầm iPhone đối diện.
 - Ghép nối bằng QR đọc cục bộ qua ReplayKit, không yêu cầu App Groups.
 
 60 fps là mục tiêu cấu hình, không phải kết quả đã đo. RTT không phải tổng độ trễ hình ảnh. ReplayKit, codec, nhiệt độ, Wi-Fi và mạng di động đều ảnh hưởng.
@@ -73,4 +74,4 @@ Chỉ vùng đã cắt được truyền, nhưng nội dung ứng dụng khác h
 
 Môi trường bàn giao là Linux, chưa chạy Xcode build, chưa xác nhận ESign/Broadcast, chưa đo RAM extension, FPS thực tế hay PiP chạy nền. Cần hoàn tất các bước trong DEVICE-TEST.md trước khi sử dụng thường xuyên.
 
-Các endpoint JPEG cũ vẫn còn để tương thích; app và viewer v0.4 dùng WebRTC.
+Các endpoint JPEG cũ vẫn còn để tương thích; app và viewer v0.5 dùng WebRTC.

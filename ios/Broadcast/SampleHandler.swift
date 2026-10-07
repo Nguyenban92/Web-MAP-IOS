@@ -76,6 +76,9 @@ final class SampleHandler: RPBroadcastSampleHandler {
             let rawFrame=CIImage(cvPixelBuffer:raw);var frame=rawFrame
             if let a=CMGetAttachment(sampleBuffer,key:RPVideoSampleOrientationKey as CFString,attachmentModeOut:nil) as? NSNumber,
                let o=CGImagePropertyOrientation(rawValue:a.uint32Value){let oriented=rawFrame.oriented(o);let ra=rawFrame.extent.width/rawFrame.extent.height,oa=oriented.extent.width/oriented.extent.height;if abs(oa-c.crop.referenceAspect)<abs(ra-c.crop.referenceAspect){frame=oriented}}
+            // Correct the 180-degree landscape mismatch seen when the game and
+            // the reference screenshot use opposite physical phone directions.
+            if c.crop.rotate180 ?? true { frame = frame.oriented(.down) }
             let e=frame.extent
             // When the device leaves the selected aspect ratio, replace the remote image with black.
             guard abs(e.width/e.height-c.crop.referenceAspect)/c.crop.referenceAspect<0.04 else {
