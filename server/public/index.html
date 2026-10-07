@@ -1,1 +1,60 @@
-<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NB Web Map</title><link rel="stylesheet" href="/style.css"></head><body><main><header><span class="logo">NB</span><div><h1>WEB MAP</h1><p>Bản đồ trực tiếp từ iPhone</p></div><span id="badge">CHỜ KẾT NỐI</span></header><section id="stage"><video id="map" autoplay muted playsinline hidden aria-label="Vùng bản đồ được chia sẻ"></video><p id="placeholder">Mở link do người phát gửi để xem bản đồ.</p></section><form id="join"><label>Mật khẩu phòng (nếu có)<input id="password" type="password" maxlength="128" autocomplete="current-password"></label><button>Xem bản đồ</button></form><footer><p id="status" role="status">Chưa kết nối</p><button id="pip" type="button">Cửa sổ nhỏ</button><button id="stop" type="button">Dừng</button><button id="fullscreen" type="button">Toàn màn hình</button></footer><p id="metrics" class="note"></p><p class="note">WebRTC • 1 người xem mỗi phòng. RTT là thời gian khứ hồi mạng. Không lưu video. Hình tự ẩn khi nguồn phát mất tín hiệu.</p></main><script src="/viewer.js"></script></body></html>
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Live Map Nguyễn Bân</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main>
+    <header>
+      <img class="logo" src="/thove-nb-logo.jpg" alt="Logo THOVE-NB">
+      <div class="brand-copy">
+        <p class="eyebrow">THOVE-NB · LIVE VIEW</p>
+        <h1>LIVE MAP NGUYỄN BÂN</h1>
+        <p class="subtitle">Hệ thống truyền hình ảnh trực tiếp bảo mật</p>
+      </div>
+      <span id="badge"><i aria-hidden="true"></i>CHỜ TÍN HIỆU</span>
+    </header>
+
+    <section id="stage">
+      <span class="corner top-left" aria-hidden="true"></span>
+      <span class="corner top-right" aria-hidden="true"></span>
+      <span class="corner bottom-left" aria-hidden="true"></span>
+      <span class="corner bottom-right" aria-hidden="true"></span>
+      <video id="map" autoplay muted playsinline hidden aria-label="Vùng bản đồ được chia sẻ"></video>
+      <div id="placeholder">
+        <span class="signal-icon" aria-hidden="true">⌁</span>
+        <strong>Sẵn sàng nhận hình ảnh trực tiếp</strong>
+        <span>Mở đúng liên kết do người phát gửi và nhập mật khẩu phòng để bắt đầu xem.</span>
+      </div>
+    </section>
+
+    <form id="join">
+      <label for="password">Mật khẩu phòng
+        <input id="password" type="password" maxlength="128" autocomplete="current-password" placeholder="Nhập mật khẩu do người phát cung cấp">
+      </label>
+      <button class="join-button" type="submit">KẾT NỐI PHÒNG</button>
+    </form>
+
+    <footer>
+      <div class="viewer-actions">
+        <button id="pip" class="pip" type="button"><span aria-hidden="true">▣</span>Cửa sổ nhỏ</button>
+        <button id="stop" class="stop" type="button"><span aria-hidden="true">■</span>Dừng xem</button>
+      </div>
+      <p id="status" role="status"><b>WebRTC bảo mật</b> · Chưa kết nối</p>
+      <button id="fullscreen" class="fullscreen" type="button"><span aria-hidden="true">⛶</span>Toàn màn hình</button>
+    </footer>
+
+    <p id="metrics" class="metrics"></p>
+    <div class="info-strip">
+      <span>Tối đa 4 người xem</span>
+      <span>Mật khẩu phòng</span>
+      <span>Không lưu video</span>
+      <a href="https://zalo.me/0779977792" target="_blank" rel="noopener noreferrer">Liên hệ Nguyễn Bân</a>
+    </div>
+  </main>
+  <script src="/viewer.js"></script>
+</body>
+</html>
