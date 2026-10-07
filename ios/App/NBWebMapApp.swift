@@ -187,9 +187,12 @@ struct ContentView: View {
                             HStack { Text("Chất lượng"); Spacer(); Text("\(Int(model.quality * 100))%") }
                             Picker("Chất lượng", selection: $model.quality) { Text("Nhẹ").tag(0.4); Text("Cân bằng").tag(0.7); Text("Nét").tag(0.9) }.pickerStyle(.segmented)
                             Text("Mặc định 30 fps. 60 fps là mục tiêu; tốc độ thực tế phụ thuộc máy, mạng và nhiệt độ.").font(.caption).foregroundStyle(.secondary)
-                            Button("Lưu vùng và chất lượng") {
+                            Button {
                                 do { try model.save(); model.message = "Đã lưu. Nếu đang phát, dừng Broadcast rồi tạo mã khởi động mới để áp dụng." } catch { model.message = error.localizedDescription }
-                            }
+                            } label: {
+                                Label("LƯU VÙNG VÀ CHẤT LƯỢNG", systemImage: "square.and.arrow.down.fill")
+                                    .font(.headline.bold()).frame(maxWidth:.infinity).padding(.vertical,8)
+                            }.buttonStyle(.borderedProminent).tint(Studio.gold).foregroundStyle(.black).controlSize(.large)
                         }.padding(.top, 8)
                     }.groupBoxStyle(StudioGroupBoxStyle())
                     GroupBox("3. Phòng phát") {
@@ -206,7 +209,10 @@ struct ContentView: View {
                                     PairingPanel(value: model.pairing, status: model.status)
                                 }
                                 Text(model.status).foregroundStyle(.mint)
-                                Button("Đóng phòng và vô hiệu hóa link", role: .destructive) { Task { await model.closeRoom() } }.disabled(model.working)
+                                Button(role: .destructive) { Task { await model.closeRoom() } } label: {
+                                    Label("ĐÓNG PHÒNG • VÔ HIỆU HÓA LINK", systemImage:"lock.fill")
+                                        .font(.subheadline.bold()).frame(maxWidth:.infinity).padding(.vertical,7)
+                                }.buttonStyle(.borderedProminent).tint(Color.red.opacity(0.88)).controlSize(.large).disabled(model.working)
                             } else {
                                 Button(model.working ? "Đang tạo…" : "Tạo phòng") { Task { await model.createRoom() } }
                                     .buttonStyle(.borderedProminent).disabled(model.working)

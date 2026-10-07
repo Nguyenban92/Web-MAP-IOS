@@ -1,4 +1,4 @@
-THOVE-NB 0.5 — MÃ NGUỒN WEBRTC, CHƯA PHẢI IPA
+THOVE-NB 0.6 — MÃ NGUỒN WEBRTC, CHƯA PHẢI IPA
 
 1. Đưa NỘI DUNG thư mục này lên gốc repository GitHub, giữ cả .github.
 2. Actions > Build NB Web Map IPA > Run workflow.

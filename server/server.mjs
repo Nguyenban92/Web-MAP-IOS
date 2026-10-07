@@ -9,16 +9,37 @@ const token = () => randomBytes(24).toString('base64url');
 const same = (a, b) => typeof a === 'string' && typeof b === 'string' && Buffer.byteLength(a) === Buffer.byteLength(b) && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 const bearer = req => req.headers.authorization?.replace(/^Bearer /, '') || '';
 const fail = (status, message) => Object.assign(new Error(message), { status });
+export function parsePublisherKeys(value = '') {
+  if (!value) return new Map();
+  const result = new Map(), secrets = new Set();
+  for (const raw of value.split(';')) {
+    const item = raw.trim(); if (!item) continue;
+    const at = item.indexOf('=');
+    const name = item.slice(0, at).trim(), secret = item.slice(at + 1).trim();
+    if (at < 1 || !/^[A-Za-z0-9_-]{1,32}$/.test(name)) throw Error('PUBLISHER_KEYS contains an invalid name');
+    if (secret.length < 24) throw Error(`Publisher key ${name} must contain at least 24 characters`);
+    if (result.has(name) || secrets.has(secret)) throw Error('PUBLISHER_KEYS contains a duplicate name or key');
+    result.set(name, secret); secrets.add(secret);
+  }
+  return result;
+}
 async function body(req, max) {
   const chunks = []; let size = 0;
   for await (const chunk of req) { size += chunk.length; if (size > max) throw fail(413, 'Payload too large'); chunks.push(chunk); }
   return Buffer.concat(chunks);
 }
-export function createApp({ adminKey, publicURL, now = Date.now, lease = 180000, startupLease = 600000, iceServers, turnURLs, turnSecret } = {}) {
+export function createApp({ adminKey, publisherKeys = '', publicURL, now = Date.now, lease = 180000, startupLease = 600000, iceServers, turnURLs, turnSecret } = {}) {
   if (!adminKey || adminKey.length < 24) throw Error('ADMIN_KEY must contain at least 24 characters');
+  const publishers = publisherKeys instanceof Map ? publisherKeys : parsePublisherKeys(publisherKeys);
+  for (const secret of publishers.values()) if (same(secret, adminKey)) throw Error('A publisher key must not equal ADMIN_KEY');
   const base = new URL(publicURL);
   if (base.protocol !== 'https:' || base.pathname !== '/' || base.search || base.hash || base.username || base.password) throw Error('PUBLIC_URL must be an HTTPS origin');
   const rooms = new Map(), rates = new Map(), pairs = new Map();
+  function publisherFor(secret) {
+    if (same(secret, adminKey)) return { id: 'admin', admin: true };
+    for (const [id, value] of publishers) if (same(secret, value)) return { id, admin: false };
+    return null;
+  }
   const assets = new Map([
     ['/', ['index.html', 'text/html; charset=utf-8']],
     ['/viewer.js', ['viewer.js', 'text/javascript; charset=utf-8']],
@@ -64,15 +85,17 @@ export function createApp({ adminKey, publicURL, now = Date.now, lease = 180000,
       if (path === '/health' && req.method === 'GET') { send(200, { ok: true }); return; }
       if (path === '/api/rooms' && req.method === 'POST') {
         limited('create:' + req.socket.remoteAddress, 20, 60000);
-        if (!same(bearer(req), adminKey)) throw fail(401, 'Unauthorized');
+        const publisher = publisherFor(bearer(req));
+        if (!publisher) throw fail(401, 'Unauthorized');
         cleanup(); if (rooms.size >= 25) throw fail(503, 'Room limit reached');
+        if (!publisher.admin && [...rooms.values()].some(room => room.owner === publisher.id)) throw fail(409, 'This publisher already has an active room');
         let input; try { input = JSON.parse((await body(req, 2048)).toString()); } catch (e) { throw e.status ? e : fail(400, 'Invalid JSON'); }
         if (typeof input?.password !== 'string' || input.password.length > 128) throw fail(400, 'Invalid password');
         const salt = randomBytes(16);
         const hash = input.password ? await derive(input.password, salt, 32) : null;
         const id = randomBytes(6).toString('hex').toUpperCase();
         const publishToken = token(), viewToken = token();
-        rooms.set(id, { publishToken, viewToken, salt, hash, created: now(), lastFrame: 0, frame: null, seq: 0, grants: new Set() });
+        rooms.set(id, { owner: publisher.id, publishToken, viewToken, salt, hash, created: now(), lastFrame: 0, frame: null, seq: 0, grants: new Set() });
         send(201, { id, publishToken, viewerURL: `${base.origin}/#${id}.${viewToken}` }); return;
       }
       if (path === '/api/pair' && req.method === 'POST') {
@@ -168,6 +191,6 @@ export function createApp({ adminKey, publicURL, now = Date.now, lease = 180000,
   return server;
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const app = createApp({ adminKey: process.env.ADMIN_KEY, publicURL: process.env.PUBLIC_URL, iceServers: process.env.ICE_SERVERS_JSON ? JSON.parse(process.env.ICE_SERVERS_JSON) : undefined, turnURLs: process.env.TURN_URLS?.split(',').filter(Boolean), turnSecret: process.env.TURN_SECRET });
+  const app = createApp({ adminKey: process.env.ADMIN_KEY, publisherKeys: process.env.PUBLISHER_KEYS, publicURL: process.env.PUBLIC_URL, iceServers: process.env.ICE_SERVERS_JSON ? JSON.parse(process.env.ICE_SERVERS_JSON) : undefined, turnURLs: process.env.TURN_URLS?.split(',').filter(Boolean), turnSecret: process.env.TURN_SECRET });
   app.listen(Number(process.env.PORT || 8080), '0.0.0.0', () => console.log('NB Web Map listening'));
 }

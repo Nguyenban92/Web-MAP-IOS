@@ -1,4 +1,4 @@
-# THOVE-NB 0.5 — WebRTC
+# THOVE-NB 0.6 — Live PiP & Multi-Publisher
 
 Mã nguồn app iPhone phát một vùng màn hình sang một iPhone khác, xem trong cửa sổ PiP khi chơi game. iOS 16+. Đây là bản triển khai cần kiểm thử thiết bị, không phải IPA đã biên dịch hay sản phẩm đã nghiệm thu.
 
@@ -41,6 +41,7 @@ Thiết lập biến môi trường trước khi chạy:
 | Biến | Giá trị |
 |---|---|
 | ADMIN_KEY | Chuỗi ngẫu nhiên ít nhất 24 ký tự, chỉ người phát biết |
+| PUBLISHER_KEYS | Tùy chọn: key riêng từng người theo dạng `ten=key;ten2=key2`, mỗi key tối đa một phòng hoạt động |
 | PUBLIC_URL | URL gốc HTTPS thật, không có đường dẫn con |
 | PORT | Cổng do hosting cung cấp, mặc định 8080 |
 | TURN_URLS | Tùy chọn: các URL turn:/turns: cách nhau dấu phẩy |
@@ -49,6 +50,16 @@ Thiết lập biến môi trường trước khi chạy:
 
 Tạo khóa: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
 Health check: `GET /health` trả `{"ok":true}`. Chỉ chạy một instance, dữ liệu phòng ở RAM; restart sẽ đóng phòng. Phòng không tự hết hạn khi publisher vẫn đang phát; phòng chỉ đóng khi người phát chủ động đóng hoặc mất publisher heartbeat quá 3 phút. Thời gian chờ bắt đầu phát là 10 phút.
+
+### Cấp key riêng cho từng người phát
+
+Giữ `ADMIN_KEY` làm khóa quản trị và không gửi cho người khác. Trên Render, thêm Secret Environment Variable `PUBLISHER_KEYS`, ví dụ:
+
+```
+nguoiso1=KHOA_NGAU_NHIEN_TOI_THIEU_24_KY_TU;nguoiso2=KHOA_NGAU_NHIEN_KHAC_24_KY_TU
+```
+
+Tên chỉ dùng chữ, số, `_` hoặc `-`. Key không được trùng nhau hay trùng `ADMIN_KEY`. Người dùng nhập phần key sau dấu `=` vào ô **Khóa tạo phòng** trong app; tên không cần nhập. Mỗi key riêng chỉ được có một phòng đang hoạt động, trong khi `ADMIN_KEY` vẫn có quyền tạo nhiều phòng trong giới hạn toàn máy chủ. Muốn khóa một người, xóa cặp `ten=key` khỏi `PUBLISHER_KEYS` rồi lưu/deploy lại Render. Render khởi động lại sẽ đóng các phòng đang chạy vì phòng được lưu trong RAM.
 
 Nếu đã có VPS/tên miền: trong `deploy`, chép `.env.example` thành `.env`, điền thông tin rồi `docker compose up -d --build`. Caddy cần cổng 80/443. Không commit `.env`.
 
@@ -60,7 +71,7 @@ Mặc định thử P2P với STUN; HTTP server chỉ ghép nối, không chuy�
 
 ## Dùng trên hai iPhone
 
-**Máy phát:** Tab Phát → nhập HTTPS và ADMIN_KEY → chọn ảnh chụp game đúng chiều → căn vùng cắt → chọn 30 fps/Cân bằng trước → Tạo phòng → gửi link xem. Bấm Chuẩn bị, giữ QR trên màn hình → nút phát → THOVE-NB Broadcast → bắt đầu. Một phòng hỗ trợ tối đa 4 người xem P2P độc lập.
+**Máy phát:** Tab Phát → nhập HTTPS và ADMIN_KEY → chọn ảnh chụp game đúng chiều → căn vùng cắt → chọn 30 fps/Cân bằng trước → Tạo phòng → gửi link xem. Bấm Chuẩn bị, giữ QR trên màn hình → nút phát → Live - THOVE-NB → bắt đầu. Một phòng hỗ trợ tối đa 4 người xem P2P độc lập.
 
 **Máy xem:** Cài cùng app → tab Xem / PiP → dán link đầy đủ → nhập mật khẩu nếu có → Kết nối → đợi hình → Mở cửa sổ nhỏ PiP → vào game. iOS quản lý kích thước/vị trí cửa sổ. Trình duyệt cũng xem được WebRTC, nhưng ưu tiên app khi cần PiP trên iPhone.
 

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createApp } from '../server.mjs';
+import { createApp, parsePublisherKeys } from '../server.mjs';
 const key = 'test-only-long-admin-key-123456789';
 async function fixture(t, opts = {}) {
   const app = createApp({ adminKey: key, publicURL: 'https://map.example.com', ...opts });
@@ -63,4 +63,18 @@ test('payload limits, MIME and web headers', async t => {
   const page = await call('/'); assert.equal(page.status, 200);
   assert.match(page.headers.get('content-security-policy'), /frame-ancestors 'none'/);
   assert.equal((await call('/../server.mjs')).status, 404);
+});
+test('separate publisher keys create isolated single active rooms', async t => {
+  const alice = 'alice-private-publisher-key-123456', bob = 'bob-private-publisher-key-12345678';
+  const { call } = await fixture(t, { publisherKeys: `alice=${alice};bob=${bob}` });
+  const make = auth => call('/api/rooms', 'POST', auth, JSON.stringify({ password: '' }));
+  const first = await make(alice); assert.equal(first.status, 201);
+  const room = await first.json();
+  assert.equal((await make(alice)).status, 409);
+  assert.equal((await make(bob)).status, 201);
+  assert.equal((await make(key)).status, 201); // master ADMIN_KEY remains valid
+  assert.equal((await call(`/api/rooms/${room.id}`, 'DELETE', room.publishToken)).status, 204);
+  assert.equal((await make(alice)).status, 201);
+  assert.throws(() => parsePublisherKeys('bad=x'), /at least 24/);
+  assert.throws(() => parsePublisherKeys(`same=${alice};same=${bob}`), /duplicate/);
 });

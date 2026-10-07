@@ -8,7 +8,7 @@ settings:
     SWIFT_VERSION: '5.0'
     TARGETED_DEVICE_FAMILY: '1'
     MARKETING_VERSION: '0.6.0'
-    CURRENT_PROJECT_VERSION: '7'
+    CURRENT_PROJECT_VERSION: '8'
     CODE_SIGNING_ALLOWED: NO
     GENERATE_INFOPLIST_FILE: NO
 packages:
@@ -52,7 +52,7 @@ targets:
     info:
       path: Broadcast/Info.plist
       properties:
-        CFBundleDisplayName: THOVE-NB Broadcast
+        CFBundleDisplayName: Live - THOVE-NB
         NSExtension:
           NSExtensionPointIdentifier: com.apple.broadcast-services-upload
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).SampleHandler
