@@ -1,0 +1,71 @@
+name: Build NB Web Map IPA
+on:
+  workflow_dispatch:
+    inputs:
+      bundle_id:
+        description: 'Bundle ID matching your signing profile'
+        required: true
+        default: vn.nguyenban.nbwebmap
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check backend
+        run: node --test server/test/*.test.mjs
+      - name: Configure identifiers
+        env:
+          APP_BUNDLE_ID: ${{ inputs.bundle_id }}
+        run: python3 scripts/configure.py
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate
+      - name: Build real iPhone binary (unsigned)
+        shell: bash
+        run: |
+          set -o pipefail
+          xcodebuild -version
+          xcodebuild -project ios/NBWebMap.xcodeproj -scheme NBWebMap \
+            -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY='' build | tee build.log
+      - name: Package and validate IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/Payload
+          cp -R build/Build/Products/Release-iphoneos/NBWebMap.app dist/Payload/
+          test -f dist/Payload/NBWebMap.app/NBWebMap
+          test -f dist/Payload/NBWebMap.app/PlugIns/Broadcast.appex/Broadcast
+          file dist/Payload/NBWebMap.app/NBWebMap | grep -q 'Mach-O'
+          file dist/Payload/NBWebMap.app/PlugIns/Broadcast.appex/Broadcast | grep -q 'Mach-O'
+          cp ios/App/App.entitlements dist/App.entitlements
+          cp ios/Broadcast/Broadcast.entitlements dist/Broadcast.entitlements
+          cp SIGNING.txt dist/
+          cd dist
+          /usr/bin/zip -qry NB-Web-Map-unsigned.ipa Payload
+          shasum -a 256 NB-Web-Map-unsigned.ipa > SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NB-Web-Map-IPA
+          path: |
+            dist/NB-Web-Map-unsigned.ipa
+            dist/*.entitlements
+            dist/SIGNING.txt
+            dist/SHA256.txt
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: build-error-log
+          path: build.log
+          if-no-files-found: ignore
+          retention-days: 7
