@@ -190,29 +190,36 @@ struct ContentView: View {
                             Button {
                                 do { try model.save(); model.message = "Đã lưu. Nếu đang phát, dừng Broadcast rồi tạo mã khởi động mới để áp dụng." } catch { model.message = error.localizedDescription }
                             } label: {
-                                Label("LƯU VÙNG VÀ CHẤT LƯỢNG", systemImage: "square.and.arrow.down.fill")
-                                    .font(.headline.bold()).frame(maxWidth:.infinity).padding(.vertical,8)
-                            }.buttonStyle(.borderedProminent).tint(Studio.gold).foregroundStyle(.black).controlSize(.large)
+                                Label("Lưu vùng và chất lượng", systemImage: "square.and.arrow.down.fill")
+                                    .font(.subheadline.bold()).frame(maxWidth:.infinity).frame(height:48)
+                            }.buttonStyle(.bordered).tint(Studio.gold)
                         }.padding(.top, 8)
                     }.groupBoxStyle(StudioGroupBoxStyle())
                     GroupBox("3. Phòng phát") {
                         VStack(alignment: .leading, spacing: 12) {
                             if let room = model.room, let url = URL(string: room.viewerURL) {
-                                Text("Mã phòng: \(room.id)").font(.headline).textSelection(.enabled)
                                 HStack {
-                                    ShareLink(item: url) { Label("Gửi link", systemImage: "square.and.arrow.up") }
+                                    Text("Mã phòng: \(room.id)").font(.headline).textSelection(.enabled).lineLimit(1).minimumScaleFactor(0.72)
                                     Spacer()
-                                    Button("QR") { showQR = true }
+                                    Button { showQR = true } label: { Label("QR",systemImage:"qrcode").font(.subheadline.bold()).frame(height:38) }
+                                        .buttonStyle(.bordered).tint(Studio.aqua)
                                 }
-                                Button("Chuẩn bị / Bắt đầu phát") { Task { await model.preparePairing() } }.buttonStyle(.borderedProminent).disabled(model.working)
+                                HStack(spacing:10) {
+                                    ShareLink(item: url) { Label("Gửi link", systemImage: "square.and.arrow.up").font(.subheadline.bold()).frame(maxWidth:.infinity).frame(height:48) }
+                                        .buttonStyle(.borderedProminent).tint(Color(red:0.18,green:0.84,blue:0.84)).foregroundStyle(.black)
+                                    Button { Task { await model.preparePairing() } } label: { Label("Chuẩn bị / Bắt đầu phát",systemImage:"antenna.radiowaves.left.and.right").font(.caption.bold()).lineLimit(1).minimumScaleFactor(0.72).frame(maxWidth:.infinity).frame(height:48) }
+                                        .buttonStyle(.borderedProminent).tint(Color(red:0.05,green:0.55,blue:1.0)).disabled(model.working)
+                                }
                                 if !model.pairing.isEmpty {
                                     PairingPanel(value: model.pairing, status: model.status)
                                 }
-                                Text(model.status).foregroundStyle(.mint)
+                                Label(model.status,systemImage:"circle.fill").font(.subheadline.bold()).foregroundStyle(Studio.aqua)
+                                    .frame(maxWidth:.infinity,alignment:.leading).padding(.horizontal,12).frame(height:44)
+                                    .background(Studio.aqua.opacity(0.06),in:RoundedRectangle(cornerRadius:12)).overlay(RoundedRectangle(cornerRadius:12).stroke(Studio.aqua.opacity(0.28)))
                                 Button(role: .destructive) { Task { await model.closeRoom() } } label: {
-                                    Label("ĐÓNG PHÒNG • VÔ HIỆU HÓA LINK", systemImage:"lock.fill")
-                                        .font(.subheadline.bold()).frame(maxWidth:.infinity).padding(.vertical,7)
-                                }.buttonStyle(.borderedProminent).tint(Color.red.opacity(0.88)).controlSize(.large).disabled(model.working)
+                                    Label("Đóng phòng • Vô hiệu hóa link", systemImage:"lock.fill")
+                                        .font(.subheadline.bold()).frame(maxWidth:.infinity).frame(height:48)
+                                }.buttonStyle(.bordered).tint(.red).disabled(model.working)
                             } else {
                                 Button(model.working ? "Đang tạo…" : "Tạo phòng") { Task { await model.createRoom() } }
                                     .buttonStyle(.borderedProminent).disabled(model.working)
