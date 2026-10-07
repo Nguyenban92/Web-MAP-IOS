@@ -7,6 +7,25 @@ final class MapSurface:UIView {
     override class var layerClass:AnyClass{AVSampleBufferDisplayLayer.self}
     var display:AVSampleBufferDisplayLayer{layer as! AVSampleBufferDisplayLayer}
 }
+final class LivePiPViewController:AVPictureInPictureVideoCallViewController {
+    let videoSurface=MapSurface()
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .black
+        videoSurface.translatesAutoresizingMaskIntoConstraints=false
+        videoSurface.display.videoGravity = .resizeAspect
+        view.addSubview(videoSurface)
+        NSLayoutConstraint.activate([
+            videoSurface.leadingAnchor.constraint(equalTo:view.leadingAnchor),
+            videoSurface.trailingAnchor.constraint(equalTo:view.trailingAnchor),
+            videoSurface.topAnchor.constraint(equalTo:view.topAnchor),
+            videoSurface.bottomAnchor.constraint(equalTo:view.bottomAnchor)
+        ])
+        // A wide live canvas lets the system offer a much shorter compact PiP
+        // than the old square media-player window. The square map stays fitted.
+        preferredContentSize=CGSize(width:320,height:180)
+    }
+}
 struct MapPreview:UIViewRepresentable {
     let engine:ViewerEngine
     func makeUIView(context:Context)->MapSurface{engine.surface}
@@ -49,7 +68,7 @@ final class PiPFrameSink:NSObject,RTCVideoRenderer {
     }
 }
 @MainActor
-final class ViewerEngine:NSObject,ObservableObject,AVPictureInPictureSampleBufferPlaybackDelegate,AVPictureInPictureControllerDelegate {
+final class ViewerEngine:NSObject,ObservableObject,AVPictureInPictureControllerDelegate {
     @Published var message="Dán link do máy phát chia sẻ."
     @Published var stats="Chưa có dữ liệu đường truyền"
     @Published var connected=false
@@ -57,6 +76,7 @@ final class ViewerEngine:NSObject,ObservableObject,AVPictureInPictureSampleBuffe
     @Published var paused=false
     @Published var pipActive=false
     let surface=MapSurface()
+    private let pipViewController=LivePiPViewController()
     private let sink=PiPFrameSink()
     private var pip:AVPictureInPictureController?
     private var peer:LivePeer?
@@ -69,17 +89,25 @@ final class ViewerEngine:NSObject,ObservableObject,AVPictureInPictureSampleBuffe
     private let imageContext=CIContext(options:[.cacheIntermediates:false])
     override init() {
         super.init();surface.display.videoGravity = .resizeAspect
-        var timebase:CMTimebase?
-        CMTimebaseCreateWithSourceClock(allocator:kCFAllocatorDefault,sourceClock:CMClockGetHostTimeClock(),timebaseOut:&timebase)
-        if let t=timebase {surface.display.controlTimebase=t;CMTimebaseSetTime(t,time:CMClockGetTime(CMClockGetHostTimeClock()));CMTimebaseSetRate(t,rate:1)}
+        Self.configureTimebase(surface.display)
+        pipViewController.loadViewIfNeeded()
+        Self.configureTimebase(pipViewController.videoSurface.display)
         if AVPictureInPictureController.isPictureInPictureSupported() {
-            pip=AVPictureInPictureController(contentSource:.init(sampleBufferDisplayLayer:surface.display,playbackDelegate:self))
-            pip?.delegate=self;pip?.requiresLinearPlayback=true
+            // A screen-share is a live call-style source, not seekable media.
+            // This content source gives iOS the live PiP chrome (close/restore)
+            // instead of the media-player chrome that contains +/-10 seconds.
+            pip=AVPictureInPictureController(contentSource:.init(activeVideoCallSourceView:surface,contentViewController:pipViewController))
+            pip?.delegate=self
         }
         sink.onFrame = { [weak self] pixel in
             guard let self=self,self.connected,!self.paused else{return}
             self.enqueue(pixel);self.lastFrame=Date();self.hasFrame=true
         }
+    }
+    private static func configureTimebase(_ layer:AVSampleBufferDisplayLayer) {
+        var timebase:CMTimebase?
+        CMTimebaseCreateWithSourceClock(allocator:kCFAllocatorDefault,sourceClock:CMClockGetHostTimeClock(),timebaseOut:&timebase)
+        if let t=timebase {layer.controlTimebase=t;CMTimebaseSetTime(t,time:CMClockGetTime(CMClockGetHostTimeClock()));CMTimebaseSetRate(t,rate:1)}
     }
     func connect(link:String,password:String,forceRelay:Bool=false) async {
         stop();let attempt=connectionID
@@ -122,11 +150,13 @@ final class ViewerEngine:NSObject,ObservableObject,AVPictureInPictureSampleBuffe
         var timing=CMSampleTimingInfo(duration:.invalid,presentationTimeStamp:CMClockGetTime(CMClockGetHostTimeClock()),decodeTimeStamp:.invalid)
         var sample:CMSampleBuffer?
         guard CMSampleBufferCreateReadyWithImageBuffer(allocator:kCFAllocatorDefault,imageBuffer:pixel,formatDescription:format,sampleTiming:&timing,sampleBufferOut:&sample)==noErr,let sample=sample else{return}
-        if surface.display.status == .failed{surface.display.flush()}
-        if surface.display.isReadyForMoreMediaData{surface.display.enqueue(sample)}
+        for display in [surface.display,pipViewController.videoSurface.display] {
+            if display.status == .failed{display.flush()}
+            if display.isReadyForMoreMediaData{display.enqueue(sample)}
+        }
     }
     private func blank() {
-        hasFrame=false;surface.display.flushAndRemoveImage()
+        hasFrame=false;surface.display.flushAndRemoveImage();pipViewController.videoSurface.display.flushAndRemoveImage()
         var buffer:CVPixelBuffer?
         guard CVPixelBufferCreate(kCFAllocatorDefault,320,240,kCVPixelFormatType_32BGRA,[kCVPixelBufferIOSurfacePropertiesKey as String:[:]] as CFDictionary,&buffer)==kCVReturnSuccess,let buffer=buffer else{return}
         imageContext.render(CIImage(color:.black).cropped(to:CGRect(x:0,y:0,width:320,height:240)),to:buffer);enqueue(buffer)
@@ -134,10 +164,6 @@ final class ViewerEngine:NSObject,ObservableObject,AVPictureInPictureSampleBuffe
     func startPiP() {
         guard hasFrame,let pip=pip else{message="Đợi có hình trước khi bật PiP.";return}
         guard pip.isPictureInPicturePossible else{message="iOS chưa sẵn sàng PiP. Đợi có hình rồi thử lại.";return}
-        // This is a live feed, not seekable media. Reassert immediately before
-        // presentation so the system PiP UI omits the ±10-second controls.
-        pip.requiresLinearPlayback=true
-        pip.invalidatePlaybackState()
         pip.startPictureInPicture()
     }
     func stop() {
@@ -151,11 +177,6 @@ final class ViewerEngine:NSObject,ObservableObject,AVPictureInPictureSampleBuffe
         leaveURL=nil;accessToken="";pip?.stopPictureInPicture();blank();stats="Chưa có dữ liệu đường truyền"
         try? AVAudioSession.sharedInstance().setActive(false,options:.notifyOthersOnDeactivation)
     }
-    func pictureInPictureController(_ pictureInPictureController:AVPictureInPictureController,setPlaying playing:Bool){paused = !playing;if paused{blank()};pip?.invalidatePlaybackState()}
-    func pictureInPictureControllerTimeRangeForPlayback(_ pictureInPictureController:AVPictureInPictureController)->CMTimeRange{CMTimeRange(start:.negativeInfinity,duration:.positiveInfinity)}
-    func pictureInPictureControllerIsPlaybackPaused(_ pictureInPictureController:AVPictureInPictureController)->Bool{paused}
-    func pictureInPictureController(_ pictureInPictureController:AVPictureInPictureController,didTransitionToRenderSize newRenderSize:CMVideoDimensions){}
-    func pictureInPictureController(_ pictureInPictureController:AVPictureInPictureController,skipByInterval skipInterval:CMTime,completion completionHandler:@escaping()->Void){completionHandler()}
     func pictureInPictureController(_ pictureInPictureController:AVPictureInPictureController,failedToStartPictureInPictureWithError error:Error){message="PiP: "+error.localizedDescription}
     func pictureInPictureControllerDidStartPictureInPicture(_ pictureInPictureController:AVPictureInPictureController){pipActive=true}
     func pictureInPictureControllerDidStopPictureInPicture(_ pictureInPictureController:AVPictureInPictureController){pipActive=false}
@@ -170,8 +191,12 @@ struct ViewerView:View {
         NavigationStack {
             ScrollView {
                 VStack(alignment:.leading,spacing:20) {
-                    Label("Xem trực tiếp",systemImage:"play.rectangle.fill").font(.title2.bold()).foregroundStyle(.mint)
-                    Text("Nhận vùng bản đồ và mở cửa sổ nhỏ khi chơi game.").foregroundStyle(.secondary)
+                    VStack(alignment:.leading,spacing:2) {
+                        Text("THOVE-NB").font(.system(size:34,weight:.black,design:.rounded)).foregroundStyle(LinearGradient(colors:[Studio.gold,.yellow.opacity(0.8)],startPoint:.topLeading,endPoint:.bottomTrailing))
+                        Text("LIVE MAP NGUYỄN BÂN").font(.system(size:12,weight:.semibold,design:.rounded)).tracking(3).foregroundStyle(.white.opacity(0.78))
+                    }
+                    HStack { Label("XEM TRỰC TIẾP",systemImage:"play.rectangle.fill").font(.headline).foregroundStyle(Studio.aqua); Spacer(); Text(engine.connected ? "ĐANG KẾT NỐI":"CHỜ KẾT NỐI").font(.caption2.bold()).foregroundStyle(engine.connected ? .green:.secondary).padding(.horizontal,10).padding(.vertical,6).background(.black.opacity(0.3),in:Capsule()) }
+                    Text("Nhận vùng bản đồ và mở cửa sổ siêu gọn khi chơi game.").foregroundStyle(.secondary)
                     GroupBox("Kết nối phòng") {
                         VStack(spacing:12) {
                             HStack { TextField("Dán link xem HTTPS",text:$link).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled(); Button("Dán"){link=UIPasteboard.general.string ?? link} }
@@ -181,18 +206,18 @@ struct ViewerView:View {
                                 Button("Dừng xem",role:.destructive){engine.stop()}.buttonStyle(.bordered).disabled(!engine.connected)
                             }
                         }.padding(.top,8)
-                    }
-                    MapPreview(engine:engine).frame(height:300).background(.black).clipShape(RoundedRectangle(cornerRadius:18))
-                    Label(engine.message,systemImage:engine.hasFrame ? "checkmark.circle.fill":"antenna.radiowaves.left.and.right").font(.callout).foregroundStyle(.mint)
+                    }.groupBoxStyle(StudioGroupBoxStyle())
+                    MapPreview(engine:engine).frame(height:300).background(.black).clipShape(RoundedRectangle(cornerRadius:18)).overlay(RoundedRectangle(cornerRadius:18).stroke(Studio.aqua.opacity(0.55)))
+                    Label(engine.message,systemImage:engine.hasFrame ? "checkmark.circle.fill":"antenna.radiowaves.left.and.right").font(.callout).foregroundStyle(Studio.aqua)
                     Text(engine.stats).font(.system(.caption,design:.monospaced)).foregroundStyle(.secondary)
-                    Button{engine.startPiP()}label:{Label(engine.pipActive ? "PiP đang mở":"Mở cửa sổ nhỏ PiP",systemImage:"pip.enter").frame(maxWidth:.infinity)}.buttonStyle(.borderedProminent).controlSize(.large).disabled(!engine.hasFrame||engine.pipActive)
+                    Button{engine.startPiP()}label:{Label(engine.pipActive ? "PiP ĐANG MỞ":"MỞ CỬA SỔ SIÊU GỌN",systemImage:"pip.enter").font(.headline).frame(maxWidth:.infinity)}.buttonStyle(.borderedProminent).tint(Studio.aqua).foregroundStyle(.black).controlSize(.large).disabled(!engine.hasFrame||engine.pipActive)
                     DisclosureGroup("Kết nối nâng cao") {
                         Toggle("Chỉ dùng TURN",isOn:$forceRelay).disabled(engine.connected)
                         Text("Mặc định dùng P2P, tự thử TURN nếu máy chủ đã cấu hình. Chỉ bật ép TURN khi có dịch vụ chuyển tiếp. RTT là thời gian mạng khứ hồi, không phải độ trễ toàn bộ hình ảnh.").font(.caption).foregroundStyle(.secondary)
                     }
                     HStack { Text("Tối đa 4 người xem • Nguyễn Bân").font(.caption).foregroundStyle(.secondary); Spacer(); Link("Zalo",destination:URL(string:"https://zalo.me/0779977792")!).font(.caption.bold()) }
                 }.textFieldStyle(.roundedBorder).padding()
-            }.background(Color(red:0.035,green:0.06,blue:0.10)).navigationTitle("Xem / PiP")
+            }.background(LinearGradient(colors:[Studio.background,Color(red:0.01,green:0.08,blue:0.14),Studio.background],startPoint:.topLeading,endPoint:.bottomTrailing).ignoresSafeArea()).navigationTitle("Xem / PiP")
         }
     }
 }

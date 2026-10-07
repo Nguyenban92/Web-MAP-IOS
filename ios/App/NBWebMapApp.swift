@@ -127,18 +127,44 @@ struct ContentView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    HStack {
-                        Image(systemName: "map.fill").font(.largeTitle).foregroundStyle(.mint)
-                        VStack(alignment: .leading) { Text("THOVE-NB").font(.title2.bold()); Text("Bản đồ trực tiếp • WebRTC 0.5").font(.caption).foregroundStyle(.secondary) }
+                    HStack(alignment:.top) {
+                        VStack(alignment:.leading,spacing:2) {
+                            Text("THOVE-NB").font(.system(size:34,weight:.black,design:.rounded))
+                                .foregroundStyle(LinearGradient(colors:[Studio.gold,Color(red:1,green:0.91,blue:0.58)],startPoint:.topLeading,endPoint:.bottomTrailing))
+                            Text("LIVE MAP NGUYỄN BÂN").font(.system(size:12,weight:.semibold,design:.rounded)).tracking(3).foregroundStyle(.white.opacity(0.78))
+                        }
+                        Spacer()
+                        Label(model.server.isEmpty ? "Chưa kết nối":"Đã kết nối",systemImage:"circle.fill")
+                            .font(.caption.bold()).foregroundStyle(model.server.isEmpty ? .secondary:Studio.aqua)
+                            .padding(.horizontal,12).padding(.vertical,8)
+                            .background(.black.opacity(0.25),in:Capsule()).overlay(Capsule().stroke((model.server.isEmpty ? Color.gray:Studio.aqua).opacity(0.5)))
                     }
-                    Text("Phát vùng màn hình • Ghép nối không cần App Groups").font(.caption).foregroundStyle(.mint)
+                    HStack(spacing:14) {
+                        ZStack { Circle().fill(Studio.aqua.opacity(0.12)); Circle().stroke(Studio.aqua.opacity(0.45),lineWidth:2); Image(systemName:"dot.radiowaves.left.and.right").font(.title).foregroundStyle(Studio.aqua) }.frame(width:68,height:68)
+                        VStack(alignment:.leading,spacing:5) {
+                            Text(model.room == nil ? "Sẵn sàng thiết lập":"Sẵn sàng phát").font(.headline)
+                            Text(model.status).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                        }
+                        Spacer()
+                        if model.room != nil {
+                            Button { Task { await model.preparePairing() } } label:{ Label("BẮT ĐẦU PHÁT",systemImage:"antenna.radiowaves.left.and.right").font(.caption.bold()).padding(.vertical,8) }
+                                .buttonStyle(.borderedProminent).tint(Studio.aqua).foregroundStyle(.black).disabled(model.working)
+                        }
+                    }.padding(16).studioCard(accent:Studio.aqua)
+                    HStack {
+                        StudioStep(number:"01",title:"Máy chủ",active:!model.server.isEmpty)
+                        Rectangle().fill(Studio.aqua.opacity(0.35)).frame(height:1)
+                        StudioStep(number:"02",title:"Vùng chia sẻ",active:model.screenshot != nil)
+                        Rectangle().fill(.white.opacity(0.18)).frame(height:1)
+                        StudioStep(number:"03",title:"Phòng phát",active:model.room != nil)
+                    }
                     GroupBox("1. Máy chủ") {
                         VStack(spacing: 12) {
                             HStack { TextField("https://map.example.com", text: $model.server).textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL).disabled(model.room != nil); Button("Dán"){model.server=UIPasteboard.general.string ?? model.server}.disabled(model.room != nil) }
                             HStack { SecureField("Khóa tạo phòng (ADMIN_KEY)", text: $model.adminKey); Button("Dán"){model.adminKey=UIPasteboard.general.string ?? model.adminKey} }
                             SecureField("Mật khẩu người xem (tùy chọn)", text: $model.password)
                         }.textFieldStyle(.roundedBorder).padding(.top, 8)
-                    }
+                    }.groupBoxStyle(StudioGroupBoxStyle())
                     GroupBox("2. Chọn vùng bản đồ") {
                         VStack(alignment: .leading, spacing: 12) {
                             PhotosPicker(selection: $photo, matching: .images) { Label("Chọn ảnh màn hình game", systemImage: "photo") }
@@ -165,7 +191,7 @@ struct ContentView: View {
                                 do { try model.save(); model.message = "Đã lưu. Nếu đang phát, dừng Broadcast rồi tạo mã khởi động mới để áp dụng." } catch { model.message = error.localizedDescription }
                             }
                         }.padding(.top, 8)
-                    }
+                    }.groupBoxStyle(StudioGroupBoxStyle())
                     GroupBox("3. Phòng phát") {
                         VStack(alignment: .leading, spacing: 12) {
                             if let room = model.room, let url = URL(string: room.viewerURL) {
@@ -186,19 +212,41 @@ struct ContentView: View {
                                     .buttonStyle(.borderedProminent).disabled(model.working)
                             }
                         }.frame(maxWidth: .infinity, alignment: .leading).padding(.top, 8)
-                    }
+                    }.groupBoxStyle(StudioGroupBoxStyle())
                     Text(model.message).font(.callout).foregroundStyle(.orange)
                     HStack { Text("Thông tin: Nguyễn Bân").font(.caption).foregroundStyle(.secondary); Spacer(); Link(destination:URL(string:"https://zalo.me/0779977792")!){Label("Liên hệ Zalo",systemImage:"message.fill").font(.caption.bold())} }
                     Text("Giữ game cùng chiều với ảnh mẫu. Tắt thông báo trước khi phát: mọi nội dung xuất hiện trong vùng chọn đều có thể được truyền. Video WebRTC ưu tiên H.264, không truyền âm thanh.")
                         .font(.caption).foregroundStyle(.secondary)
                 }.padding()
-            }.background(Color(red: 0.035, green: 0.06, blue: 0.10))
+            }.background(LinearGradient(colors:[Studio.background,Color(red:0.01,green:0.08,blue:0.14),Studio.background],startPoint:.topLeading,endPoint:.bottomTrailing).ignoresSafeArea())
                 .onAppear { model.restorePreview() }
                 .onChange(of: photo) { item in Task { await model.load(item) } }
                 .onReceive(timer) { _ in Task { await model.refreshStatus() } }
                 .sheet(isPresented: $showQR) { if let room = model.room { QRSheet(value: room.viewerURL) } }
         }
     }
+}
+
+enum Studio {
+    static let background=Color(red:0.015,green:0.035,blue:0.065)
+    static let panel=Color(red:0.055,green:0.085,blue:0.125)
+    static let aqua=Color(red:0.08,green:0.92,blue:0.96)
+    static let gold=Color(red:0.95,green:0.72,blue:0.30)
+}
+struct StudioCardModifier:ViewModifier {
+    let accent:Color
+    func body(content:Content)->some View { content.background(LinearGradient(colors:[Studio.panel.opacity(0.98),Studio.background.opacity(0.94)],startPoint:.topLeading,endPoint:.bottomTrailing),in:RoundedRectangle(cornerRadius:20)).overlay(RoundedRectangle(cornerRadius:20).stroke(LinearGradient(colors:[accent.opacity(0.72),.white.opacity(0.08)],startPoint:.topLeading,endPoint:.bottomTrailing),lineWidth:1)).shadow(color:accent.opacity(0.10),radius:14,y:6) }
+}
+extension View { func studioCard(accent:Color=Studio.gold)->some View { modifier(StudioCardModifier(accent:accent)) } }
+struct StudioGroupBoxStyle:GroupBoxStyle {
+    func makeBody(configuration:Configuration)->some View {
+        VStack(alignment:.leading,spacing:12) { configuration.label.font(.headline.bold()).foregroundStyle(Studio.gold); configuration.content }
+            .padding(16).studioCard()
+    }
+}
+struct StudioStep:View {
+    let number:String,title:String,active:Bool
+    var body:some View { VStack(spacing:5) { Text(number).font(.caption.bold()).foregroundStyle(active ? .black:.secondary).frame(width:34,height:34).background(active ? Studio.aqua:Color.white.opacity(0.08),in:Circle()).overlay(Circle().stroke(active ? Studio.aqua:Color.white.opacity(0.18))); Text(title).font(.caption2).foregroundStyle(active ? Studio.aqua:.secondary).lineLimit(1) }.frame(maxWidth:.infinity) }
 }
 
 struct CropEditor: View {
