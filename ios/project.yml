@@ -7,8 +7,8 @@ settings:
   base:
     SWIFT_VERSION: '5.0'
     TARGETED_DEVICE_FAMILY: '1'
-    MARKETING_VERSION: '0.3.0'
-    CURRENT_PROJECT_VERSION: '3'
+    MARKETING_VERSION: '0.4.0'
+    CURRENT_PROJECT_VERSION: '4'
     CODE_SIGNING_ALLOWED: NO
     GENERATE_INFOPLIST_FILE: NO
 packages:
@@ -27,7 +27,7 @@ targets:
     info:
       path: App/Info.plist
       properties:
-        CFBundleDisplayName: NB Web Map
+        CFBundleDisplayName: THOVE-NB
         UIBackgroundModes: [audio]
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
@@ -52,7 +52,7 @@ targets:
     info:
       path: Broadcast/Info.plist
       properties:
-        CFBundleDisplayName: NB Map Broadcast
+        CFBundleDisplayName: THOVE-NB Broadcast
         NSExtension:
           NSExtensionPointIdentifier: com.apple.broadcast-services-upload
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).SampleHandler

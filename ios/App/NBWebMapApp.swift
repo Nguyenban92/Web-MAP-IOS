@@ -51,7 +51,8 @@ final class AppModel: ObservableObject {
         req.setValue("Bearer \(room.publishToken)", forHTTPHeaderField: "Authorization")
         guard let (data, response) = try? await URLSession.shared.data(for: req), (response as? HTTPURLResponse)?.statusCode == 200,
               let v = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
-        status = (v["live"] as? Bool == true) ? "Đã thương lượng video • Kiểm tra FPS ở máy nhận" : ((v["paired"] as? Bool == true) ? "Đã ghép nối — chuyển vào game đúng chiều ảnh mẫu" : "Chờ bật NB Map Broadcast")
+        let viewers=v["viewers"] as? Int ?? 0, live=v["liveViewers"] as? Int ?? 0
+        status = live>0 ? "Đang phát trực tiếp • \(live)/4 người xem" : ((v["paired"] as? Bool == true) ? "Đã ghép nối • Đang chờ người xem (\(viewers)/4)" : "Chờ bật THOVE-NB Broadcast")
     }
     func save() throws {
         guard crop.valid else { throw failure("Vùng chọn không hợp lệ") }
@@ -128,13 +129,13 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     HStack {
                         Image(systemName: "map.fill").font(.largeTitle).foregroundStyle(.mint)
-                        VStack(alignment: .leading) { Text("NB WEB MAP").font(.title2.bold()); Text("Chia sẻ vùng bản đồ • WebRTC 0.3").font(.caption).foregroundStyle(.secondary) }
+                        VStack(alignment: .leading) { Text("THOVE-NB").font(.title2.bold()); Text("Bản đồ trực tiếp • WebRTC 0.4").font(.caption).foregroundStyle(.secondary) }
                     }
                     Text("Phát vùng màn hình • Ghép nối không cần App Groups").font(.caption).foregroundStyle(.mint)
                     GroupBox("1. Máy chủ") {
                         VStack(spacing: 12) {
-                            TextField("https://map.example.com", text: $model.server).textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL).disabled(model.room != nil)
-                            SecureField("Khóa tạo phòng (ADMIN_KEY)", text: $model.adminKey)
+                            HStack { TextField("https://map.example.com", text: $model.server).textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL).disabled(model.room != nil); Button("Dán"){model.server=UIPasteboard.general.string ?? model.server}.disabled(model.room != nil) }
+                            HStack { SecureField("Khóa tạo phòng (ADMIN_KEY)", text: $model.adminKey); Button("Dán"){model.adminKey=UIPasteboard.general.string ?? model.adminKey} }
                             SecureField("Mật khẩu người xem (tùy chọn)", text: $model.password)
                         }.textFieldStyle(.roundedBorder).padding(.top, 8)
                     }
@@ -182,6 +183,7 @@ struct ContentView: View {
                         }.frame(maxWidth: .infinity, alignment: .leading).padding(.top, 8)
                     }
                     Text(model.message).font(.callout).foregroundStyle(.orange)
+                    HStack { Text("Thông tin: Nguyễn Bân").font(.caption).foregroundStyle(.secondary); Spacer(); Link(destination:URL(string:"https://zalo.me/0779977792")!){Label("Liên hệ Zalo",systemImage:"message.fill").font(.caption.bold())} }
                     Text("Giữ game cùng chiều với ảnh mẫu. Tắt thông báo trước khi phát: mọi nội dung xuất hiện trong vùng chọn đều có thể được truyền. Video WebRTC ưu tiên H.264, không truyền âm thanh.")
                         .font(.caption).foregroundStyle(.secondary)
                 }.padding()
@@ -255,7 +257,7 @@ struct RootView: View {
         TabView {
             ContentView().tabItem { Label("Phát", systemImage: "dot.radiowaves.left.and.right") }
             ViewerView().tabItem { Label("Xem / PiP", systemImage: "pip") }
-            NavigationStack { ScrollView { Text("NB WEB MAP 0.3\n\nMáy phát: chọn ảnh game, căn vùng và tạo phòng. Bấm Chuẩn bị, giữ mã khởi động trên màn hình rồi chọn NB Map Broadcast. Đợi trạng thái Đã ghép nối mới chuyển vào game. Mã hết hạn sau 90 giây; tạo lại nếu cần.\n\nMáy xem: dán link vào tab Xem, nhập mật khẩu, kết nối. Khi có hình, bấm PiP rồi chuyển vào game. iOS quyết định kích thước và vị trí cửa sổ.\n\nChỉnh vùng khi đang phát: dừng Broadcast trước, lưu vùng mới rồi tạo mã khởi động mới.\n\nNếu NB Map Broadcast không xuất hiện: chữ ký phần mở rộng chưa được iOS chấp nhận. Bỏ App Groups không tự sửa lỗi ký.\n\nKhông truyền âm thanh. Nội dung xuất hiện trong vùng chọn đều có thể được chia sẻ. Dừng phát khi chuyển sang ứng dụng riêng tư.\n\nƯu tiên kết nối P2P. Hai mạng khác nhau có thể cần TURN; máy chủ mặc định chưa có TURN. Không bảo đảm hạ tầng miễn phí không giới hạn. FPS là số khung nhận thực tế; RTT là thời gian mạng khứ hồi, không phải độ trễ từ màn hình đến màn hình. Một người xem mỗi phòng. Bản này cần build và kiểm thử trên hai iPhone thật.").padding() }.navigationTitle("Hướng dẫn") }.tabItem { Label("Hướng dẫn", systemImage: "questionmark.circle") }
+            NavigationStack { ScrollView { Text("THOVE-NB 0.4\nNguyễn Bân\n\nMáy phát: chọn ảnh game, căn vùng, lưu và tạo phòng. Bấm Chuẩn bị rồi chọn THOVE-NB Broadcast.\n\nTối đa 4 người xem dùng chung link và mật khẩu. Mỗi người mở PiP riêng.\n\nChỉnh vùng: dừng Broadcast, lưu vùng mới rồi tạo mã khởi động mới. Không truyền âm thanh. Hai mạng khó xuyên NAT có thể cần TURN.").padding() }.navigationTitle("Hướng dẫn") }.tabItem { Label("Hướng dẫn", systemImage: "questionmark.circle") }
         }.tint(.mint)
     }
 }
@@ -269,7 +271,7 @@ struct PairingPanel: View {
                 Image(uiImage: img).interpolation(.none).resizable().scaledToFit().frame(width: 240, height: 240).padding(16).background(.white)
             }
             BroadcastButton().frame(width: 55, height: 55)
-            Text("Bấm biểu tượng → chọn NB Map Broadcast. Giữ màn hình này đến khi báo Đã ghép nối. Mã dùng một lần, hết hạn sau 90 giây.").font(.caption)
+            Text("Bấm biểu tượng → chọn THOVE-NB Broadcast. Giữ màn hình này đến khi báo Đã ghép nối. Mã dùng một lần, hết hạn sau 90 giây.").font(.caption)
             Text(status).font(.caption).foregroundStyle(.mint)
         }.frame(maxWidth: .infinity)
     }

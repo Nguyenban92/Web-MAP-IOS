@@ -2,7 +2,7 @@
 
 Ghi model/iOS hai máy, loại mạng, cấu hình, FPS/RTT quan sát; không ghi token hoặc khóa.
 
-1. Build workflow xanh, cài cùng IPA được ký đúng trên hai máy. NB Map Broadcast phải xuất hiện và khởi động.
+1. Build workflow xanh, cài cùng IPA được ký đúng. THOVE-NB Broadcast phải xuất hiện và khởi động.
 2. Cùng Wi-Fi, 30 fps/Cân bằng: tạo phòng, ghép QR, thấy đúng vùng trên máy xem. Thử đổi chiều; sai tỉ lệ phải đen.
 3. Bật PiP, chuyển máy xem vào game 10 phút; hình phải tiếp tục cập nhật. Đo FPS, nhiệt và RAM bằng Xcode nếu có. Đặc biệt theo dõi extension bị hệ thống dừng do bộ nhớ.
 4. Thử hai mạng khác nhau. Nếu P2P không nối được, cấu hình TURN thật và bật Chỉ dùng TURN trên máy xem; thống kê phải báo TURN và có hình.

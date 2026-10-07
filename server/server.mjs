@@ -24,7 +24,7 @@ export function createApp({ adminKey, publicURL, now = Date.now, roomTTL = 72000
     ['/viewer.js', ['viewer.js', 'text/javascript; charset=utf-8']],
     ['/style.css', ['style.css', 'text/css; charset=utf-8']]
   ]);
-  function expired(room) { return now() - room.created > roomTTL || (Math.max(room.lastFrame, room.rtc?.publisherAt || 0) ? now() - Math.max(room.lastFrame, room.rtc?.publisherAt || 0) > lease : now() - room.created > startupLease); }
+  function expired(room) { const publisher=Math.max(0,...(room.rtcSlots||[]).map(x=>x.publisherAt||0));return now()-room.created>roomTTL||(Math.max(room.lastFrame,publisher)?now()-Math.max(room.lastFrame,publisher)>lease:now()-room.created>startupLease); }
   function cleanup() {
     for (const [id, r] of rooms) {
       if (expired(r)) rooms.delete(id);
@@ -89,11 +89,13 @@ export function createApp({ adminKey, publicURL, now = Date.now, roomTTL = 72000
           try { input = JSON.parse((await body(req, 70000)).toString()); } catch(e) { throw e.status ? e : fail(400,'Invalid JSON'); }
         }
         if (rooms.get(id)!==room || expired(room)) throw fail(404,'Room closed');
-        send(200,rtc(room,id,key,req.method,input));return;
+        const slot = new URL(req.url, 'http://localhost').searchParams.get('slot');
+        send(200,rtc(room,id,key,req.method,input,slot));return;
       }
       if (action === 'status' && req.method === 'GET') {
         if (!same(bearer(req), room.publishToken)) throw fail(401, 'Unauthorized');
-        send(200, { paired: !!room.paired, live: !!room.rtc?.answer && now()-(room.rtc?.publisherAt||0)<15000, viewer: !!room.rtc?.viewer, publisherOnline: !!room.rtc?.publisherAt && now()-room.rtc.publisherAt<15000 }); return;
+        const slots=room.rtcSlots||[], viewers=slots.filter(x=>x.viewer&&now()-x.viewerAt<25000).length, live=slots.filter(x=>x.answer&&now()-x.publisherAt<15000).length;
+        send(200, { paired: !!room.paired, live: live>0, viewer: viewers>0, viewers, liveViewers:live, maxViewers:4, publisherOnline:slots.some(x=>x.publisherAt&&now()-x.publisherAt<15000) }); return;
       }
       if (action === 'pair' && req.method === 'POST') {
         if (!same(bearer(req), room.publishToken)) throw fail(401, 'Unauthorized');

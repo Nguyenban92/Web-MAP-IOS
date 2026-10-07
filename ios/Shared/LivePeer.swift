@@ -13,6 +13,7 @@ struct SignalCandidate: Codable {
     let sdpMid: String?
 }
 struct SignalState: Decodable {
+    let slot: Int
     let epoch: Int
     let viewer: Bool
     let publisherOnline: Bool
@@ -65,8 +66,10 @@ final class LivePeer: NSObject, RTCPeerConnectionDelegate {
     private var operations: [[String: Any]] = []
     private var posting = false
     private var forceRelay: Bool
-    init(server: String, roomID: String, credential: String, publisher: Bool, fps: Int = 30, maxBitrate: Int = 1200000, forceRelay: Bool = false) {
-        self.endpoint = URL(string: "\(server)/api/rooms/\(roomID)/rtc")!
+    init(server: String, roomID: String, credential: String, publisher: Bool, slot: Int? = nil, fps: Int = 30, maxBitrate: Int = 1200000, forceRelay: Bool = false) {
+        var components=URLComponents(string:"\(server)/api/rooms/\(roomID)/rtc")!
+        if let slot=slot {components.queryItems=[URLQueryItem(name:"slot",value:String(slot))]}
+        self.endpoint = components.url!
         self.credential = credential; self.publisher = publisher; self.fps = fps; self.maxBitrate = maxBitrate; self.forceRelay = forceRelay
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 5; config.timeoutIntervalForResource = 8

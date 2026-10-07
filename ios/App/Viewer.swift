@@ -170,7 +170,7 @@ struct ViewerView:View {
                     Text("Nhận vùng bản đồ và mở cửa sổ nhỏ khi chơi game.").foregroundStyle(.secondary)
                     GroupBox("Kết nối phòng") {
                         VStack(spacing:12) {
-                            TextField("Dán link xem HTTPS",text:$link).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
+                            HStack { TextField("Dán link xem HTTPS",text:$link).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled(); Button("Dán"){link=UIPasteboard.general.string ?? link} }
                             SecureField("Mật khẩu phòng (nếu có)",text:$password)
                             HStack {
                                 Button("Kết nối"){Task{await engine.connect(link:link,password:password,forceRelay:forceRelay)}}.buttonStyle(.borderedProminent).disabled(engine.connected)
@@ -186,7 +186,7 @@ struct ViewerView:View {
                         Toggle("Chỉ dùng TURN",isOn:$forceRelay).disabled(engine.connected)
                         Text("Mặc định dùng P2P, tự thử TURN nếu máy chủ đã cấu hình. Chỉ bật ép TURN khi có dịch vụ chuyển tiếp. RTT là thời gian mạng khứ hồi, không phải độ trễ toàn bộ hình ảnh.").font(.caption).foregroundStyle(.secondary)
                     }
-                    Text("Tối ưu cho 1 máy phát + 1 máy xem. Không truyền âm thanh. PiP và phát nền phải được kiểm tra trên iPhone thật.").font(.caption).foregroundStyle(.secondary)
+                    HStack { Text("Tối đa 4 người xem • Nguyễn Bân").font(.caption).foregroundStyle(.secondary); Spacer(); Link("Zalo",destination:URL(string:"https://zalo.me/0779977792")!).font(.caption.bold()) }
                 }.textFieldStyle(.roundedBorder).padding()
             }.background(Color(red:0.035,green:0.06,blue:0.10)).navigationTitle("Xem / PiP")
         }

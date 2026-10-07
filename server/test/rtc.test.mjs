@@ -3,16 +3,18 @@ import assert from 'node:assert/strict';
 import {createHmac} from 'node:crypto';
 import {createRTC} from '../rtc.mjs';
 function setup(options={}){
- let clock=100000;const room={publishToken:'publisher',grants:new Set(['viewer','other'])};
+ let clock=100000;const room={publishToken:'publisher',grants:new Set(['viewer','other','third','fourth','fifth'])};
  const rtc=createRTC({now:()=>clock,fail:(status,message)=>Object.assign(new Error(message),{status}),limited:()=>{},...options});
  const call=(key='publisher',body)=>rtc(room,'room',key,body?'POST':'GET',body);
  return {call,room,advance:n=>clock+=n};
 }
 const fails=(f,status)=>assert.throws(f,e=>e.status===status);
-test('RTC role authorization, single viewer and isolated credentials',()=>{
+test('RTC role authorization, four isolated viewers',()=>{
  const {call}=setup();fails(()=>call('unknown'),401);fails(()=>call('viewer'),409);
  const s=call('viewer',{op:'join'});assert.equal(s.viewer,true);
- fails(()=>call('other',{op:'join'}),409);fails(()=>call('other'),409);
+ const other=call('other',{op:'join'});assert.equal(other.slot,1);assert.equal(call('other').viewer,true);
+ assert.equal(call('third',{op:'join'}).slot,2);assert.equal(call('fourth',{op:'join'}).slot,3);
+ fails(()=>call('fifth',{op:'join'}),409);
  fails(()=>call('viewer',{op:'offer',epoch:s.epoch,sdp:'v=0\r\n'}),403);
  fails(()=>call('publisher',{op:'answer',epoch:s.epoch,sdp:'v=0\r\n'}),403);
  assert.equal(call('other',{op:'leave'}).closed,true);assert.equal(call().viewer,true);

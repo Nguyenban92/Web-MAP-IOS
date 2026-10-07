@@ -1,4 +1,4 @@
-# NB Web Map 0.3 — WebRTC
+# THOVE-NB 0.4 — WebRTC
 
 Mã nguồn app iPhone phát một vùng màn hình sang một iPhone khác, xem trong cửa sổ PiP khi chơi game. iOS 16+. Đây là bản triển khai cần kiểm thử thiết bị, không phải IPA đã biên dịch hay sản phẩm đã nghiệm thu.
 
@@ -59,7 +59,7 @@ Mặc định thử P2P với STUN; HTTP server chỉ ghép nối, không chuy�
 
 ## Dùng trên hai iPhone
 
-**Máy phát:** Tab Phát → nhập HTTPS và ADMIN_KEY → chọn ảnh chụp game đúng chiều → căn vùng cắt → chọn 30 fps/Cân bằng trước → Tạo phòng → gửi link xem. Bấm Chuẩn bị, giữ QR trên màn hình → nút phát → NB Map Broadcast → bắt đầu. Đợi Đã ghép nối rồi vào game. QR khởi động là bí mật một lần, hết hạn sau 90 giây; không gửi cho người xem.
+**Máy phát:** Tab Phát → nhập HTTPS và ADMIN_KEY → chọn ảnh chụp game đúng chiều → căn vùng cắt → chọn 30 fps/Cân bằng trước → Tạo phòng → gửi link xem. Bấm Chuẩn bị, giữ QR trên màn hình → nút phát → THOVE-NB Broadcast → bắt đầu. Một phòng hỗ trợ tối đa 4 người xem P2P độc lập.
 
 **Máy xem:** Cài cùng app → tab Xem / PiP → dán link đầy đủ → nhập mật khẩu nếu có → Kết nối → đợi hình → Mở cửa sổ nhỏ PiP → vào game. iOS quản lý kích thước/vị trí cửa sổ. Trình duyệt cũng xem được WebRTC, nhưng ưu tiên app khi cần PiP trên iPhone.
 
@@ -73,4 +73,4 @@ Chỉ vùng đã cắt được truyền, nhưng nội dung ứng dụng khác h
 
 Môi trường bàn giao là Linux, chưa chạy Xcode build, chưa xác nhận ESign/Broadcast, chưa đo RAM extension, FPS thực tế hay PiP chạy nền. Cần hoàn tất các bước trong DEVICE-TEST.md trước khi sử dụng thường xuyên.
 
-Các endpoint JPEG cũ vẫn còn để tương thích; app và viewer v0.3 dùng WebRTC.
+Các endpoint JPEG cũ vẫn còn để tương thích; app và viewer v0.4 dùng WebRTC.
