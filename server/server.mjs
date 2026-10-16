@@ -13,7 +13,7 @@ const fail = (status, message) => Object.assign(new Error(message), { status });
 export function parsePublisherKeys(value = '') {
   if (!value) return new Map();
   const result = new Map(), secrets = new Set();
-  for (const raw of value.split(';')) {
+  for (const raw of value.split(/[;,]/)) {
     const item = raw.trim(); if (!item) continue;
     const at = item.indexOf('=');
     const name = item.slice(0, at).trim(), secret = item.slice(at + 1).trim();
