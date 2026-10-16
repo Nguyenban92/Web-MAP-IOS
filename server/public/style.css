@@ -384,6 +384,12 @@ form {
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--bg-card-border);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  flex-wrap: wrap;
+}
+
+.field-item {
+  flex: 1;
+  min-width: 250px;
 }
 
 label {

@@ -39,7 +39,7 @@
       <div class="stage-scanline" aria-hidden="true"></div>
       <div class="stage-crosshair" aria-hidden="true"></div>
       
-      <video id="map" autoplay muted playsinline hidden aria-label="Vùng bản đồ được chia sẻ"></video>
+      <video id="map" autoplay muted playsinline autopictureinpicture hidden aria-label="Vùng bản đồ được chia sẻ"></video>
       <div id="placeholder">
         <div class="radar-scanner">
           <div class="scanner-ring ring-1"></div>
@@ -48,18 +48,29 @@
           <span class="signal-icon" aria-hidden="true">◈</span>
         </div>
         <strong>SẴN SÀNG NHẬN TÍN HIỆU RADAR</strong>
-        <span>Mở đúng liên kết do máy phát cung cấp và nhập mật khẩu phòng để kết nối.</span>
+        <span>Mở đúng liên kết do máy phát cung cấp hoặc dán link/mã phòng vào ô bên dưới.</span>
       </div>
     </section>
 
     <form id="join">
-      <label for="password">
-        <span class="label-text">MẬT KHẨU PHÒNG TRUY CẬP</span>
-        <div class="input-wrap">
-          <span class="input-icon" aria-hidden="true">🔑</span>
-          <input id="password" type="password" maxlength="128" autocomplete="current-password" placeholder="Nhập mật khẩu do máy phát cung cấp (nếu có)...">
-        </div>
-      </label>
+      <div id="roomLinkField" class="field-item" hidden>
+        <label for="roomInput">
+          <span class="label-text">LIÊN KẾT PHÒNG HOẶC MÃ PHÒNG</span>
+          <div class="input-wrap">
+            <span class="input-icon" aria-hidden="true">🔗</span>
+            <input id="roomInput" type="text" autocomplete="off" placeholder="Dán link phòng (https://...#ROOM.TOKEN) hoặc mã phòng...">
+          </div>
+        </label>
+      </div>
+      <div class="field-item">
+        <label for="password">
+          <span class="label-text">MẬT KHẨU PHÒNG (NẾU CÓ)</span>
+          <div class="input-wrap">
+            <span class="input-icon" aria-hidden="true">🔑</span>
+            <input id="password" type="password" maxlength="128" autocomplete="current-password" placeholder="Nhập mật khẩu do máy phát cung cấp...">
+          </div>
+        </label>
+      </div>
       <button class="join-button" type="submit">
         <span class="btn-label">⚡ KẾT NỐI PHÒNG</span>
       </button>
