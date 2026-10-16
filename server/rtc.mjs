@@ -6,17 +6,18 @@ const DEFAULT_ICE_SERVERS = [
       'stun:stun.l.google.com:19302',
       'stun:stun1.l.google.com:19302',
       'stun:stun2.l.google.com:19302',
-      'stun:openrelay.metered.ca:80'
+      'stun:stun.relay.metered.ca:80'
     ]
   },
   {
     urls: [
-      'turn:openrelay.metered.ca:80',
-      'turn:openrelay.metered.ca:443',
-      'turn:openrelay.metered.ca:443?transport=tcp'
+      'turn:global.relay.metered.ca:80',
+      'turn:global.relay.metered.ca:80?transport=tcp',
+      'turn:global.relay.metered.ca:443',
+      'turns:global.relay.metered.ca:443?transport=tcp'
     ],
-    username: 'openrelayproject',
-    credential: 'openrelayproject'
+    username: 'd732191b5b2bc7f77d047ad5',
+    credential: 'i10kEwRAvZVGwJoD'
   }
 ];
 
