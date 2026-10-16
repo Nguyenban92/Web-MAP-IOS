@@ -1,5 +1,26 @@
 import { createHmac } from 'node:crypto';
-export function createRTC({ now, fail, limited, iceServers = [{urls:['stun:stun.l.google.com:19302']}], turnURLs = [], turnSecret = '', maxViewers = 4 }) {
+
+const DEFAULT_ICE_SERVERS = [
+  {
+    urls: [
+      'stun:stun.l.google.com:19302',
+      'stun:stun1.l.google.com:19302',
+      'stun:stun2.l.google.com:19302',
+      'stun:openrelay.metered.ca:80'
+    ]
+  },
+  {
+    urls: [
+      'turn:openrelay.metered.ca:80',
+      'turn:openrelay.metered.ca:443',
+      'turn:openrelay.metered.ca:443?transport=tcp'
+    ],
+    username: 'openrelayproject',
+    credential: 'openrelayproject'
+  }
+];
+
+export function createRTC({ now, fail, limited, iceServers = DEFAULT_ICE_SERVERS, turnURLs = [], turnSecret = '', maxViewers = 4 }) {
   if (!Array.isArray(iceServers) || !Array.isArray(turnURLs)) throw new Error('Invalid ICE configuration');
   iceServers=iceServers.map(e=>{const urls=[].concat(e.urls||[]);if(!urls.length||!urls.every(u=>typeof u==='string'&&/^(stun|stuns|turn|turns):/.test(u)))throw new Error('Invalid ICE URL');return{...e,urls};});
   if(Boolean(turnSecret)!==Boolean(turnURLs.length)||!turnURLs.every(u=>typeof u==='string'&&/^turns?:/.test(u)))throw new Error('TURN_URLS and TURN_SECRET must be configured together');

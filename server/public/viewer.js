@@ -84,11 +84,14 @@ async function apply(state, g) {
     p.ontrack = e => {
       if (peer !== p) return;
       video.srcObject = new MediaStream([e.track]);
+      video.hidden = false;
+      if ($('placeholder')) $('placeholder').hidden = true;
       video.play().catch(() => message('Bấm vào màn hình để phát video.'));
     };
     p.onconnectionstatechange = () => {
       if (peer !== p) return;
       $('badge').textContent = p.connectionState === 'connected' ? 'TRỰC TIẾP' : 'ĐANG KẾT NỐI';
+      if (p.connectionState === 'connected') message('Đang xem video trực tiếp');
       if (p.connectionState === 'failed') message(state.relayAvailable ? 'Đang khôi phục kết nối…' : 'Mạng này có thể cần TURN. Chưa có chuyển tiếp trên máy chủ.');
     };
   }
@@ -122,11 +125,17 @@ async function metrics() {
     if (s.type === 'inbound-rtp' && s.kind === 'video') inbound = s;
     if (s.type === 'candidate-pair' && s.state === 'succeeded' && s.nominated) pair = s;
   });
-  if (inbound && inbound.framesDecoded !== latestFrames && inbound.framesDecoded > 0) {
-    latestFrames = inbound.framesDecoded; lastFrameAt = Date.now(); video.hidden = false; $('placeholder').hidden = true;
+  if (inbound && inbound.framesDecoded > 0) {
+    if (inbound.framesDecoded !== latestFrames) {
+      latestFrames = inbound.framesDecoded;
+      lastFrameAt = Date.now();
+    }
+    video.hidden = false;
+    if ($('placeholder')) $('placeholder').hidden = true;
   }
-  if (Date.now() - lastFrameAt > 3000) {
-    video.hidden = true; $('placeholder').hidden = false; $('placeholder').textContent = 'Đang chờ hình mới…';
+  if (lastFrameAt > 0 && Date.now() - lastFrameAt > 4000) {
+    video.hidden = true;
+    if ($('placeholder')) $('placeholder').hidden = false;
   }
   const relay = pair && [stats.get(pair.localCandidateId), stats.get(pair.remoteCandidateId)].some(s => s?.candidateType === 'relay');
   $('metrics').textContent = `${inbound?.framesPerSecond || 0} fps · ${pair?.currentRoundTripTime !== undefined ? Math.round(pair.currentRoundTripTime * 1000) + ' ms RTT' : 'RTT —'} · ${pair ? (relay ? 'TURN' : 'P2P') : 'Chưa có đường truyền'}`;
@@ -134,10 +143,9 @@ async function metrics() {
 
 $('join').addEventListener('submit', async e => {
   e.preventDefault();
-  const p = getPieces();
+  const p = currentPieces || getPieces();
   if (!p) {
-    message('Vui lòng dán liên kết phòng hoặc mã phòng hợp lệ.');
-    if ($('roomInput')) $('roomInput').focus();
+    message('Vui lòng mở đúng liên kết phòng do người phát cung cấp.');
     return;
   }
   currentPieces = p;
@@ -204,14 +212,12 @@ function updateRoomState() {
   const p = getPieces();
   if (p) {
     currentPieces = p;
-    if ($('roomLinkField')) $('roomLinkField').hidden = true;
     $('join').hidden = false;
     message('Phòng đã sẵn sàng. Nhập mật khẩu (nếu có) và bấm Kết nối.');
   } else {
     currentPieces = null;
-    if ($('roomLinkField')) $('roomLinkField').hidden = false;
-    $('join').hidden = false;
-    message('Dán liên kết phòng hoặc mã phòng do người phát cung cấp để xem.');
+    $('join').hidden = true;
+    message('Vui lòng mở đúng liên kết phòng do người phát cung cấp.');
   }
 }
 
