@@ -89,47 +89,122 @@ main {
   z-index: 1;
 }
 
-/* Header Section */
-header {
+/* Header Section - Styled after user's Bio Web */
+header.bio-header {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 22px;
   margin-bottom: 22px;
-  padding: 14px 18px;
+  padding: 18px 24px;
   background: var(--bg-card);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--bg-card-border);
-  border-radius: 20px;
-  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  border-radius: 24px;
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
-.logo-box {
+/* Conqueror Avatar Wrapper from Bio Web */
+.conqueror-avatar-wrapper {
   position: relative;
-  width: 68px;
-  height: 68px;
+  width: 90px;
+  height: 90px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+  animation: avatarWrapperBeat 3.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  will-change: transform;
 }
 
-.logo {
+@keyframes avatarWrapperBeat {
+  0%, 100% { transform: scale(1); }
+  18% { transform: scale(1.02); }
+  28% { transform: scale(1.06) rotate(-0.8deg); }
+  31% { transform: scale(1.03) rotate(0.6deg); }
+  35% { transform: scale(1.08) rotate(0deg); }
+  42% { transform: scale(1.04); }
+  60% { transform: scale(1.02); }
+  75% { transform: scale(0.98); }
+  84% { transform: scale(1.03) rotate(-0.5deg); }
+  88% { transform: scale(0.99) rotate(0.4deg); }
+}
+
+.conqueror-avatar-wrapper::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #fff7d6, #f6d365, #9333ea, #06b6d4, #f43f5e, #fff7d6);
+  background-size: 300% 300%;
+  animation: conquerorGlow 3.6s ease infinite alternate;
+  z-index: 1;
+  box-shadow: 0 0 20px rgba(246, 211, 101, 0.55), inset 0 0 8px rgba(255, 255, 255, 0.6);
+}
+
+.conqueror-avatar-wrapper::after {
+  content: '';
+  position: absolute;
+  inset: -7px;
+  border-radius: 44%;
+  border: 2px dashed rgba(246, 211, 101, 0.6);
+  animation: conquerorRotate 10s linear infinite;
+  z-index: 0;
+}
+
+@keyframes conquerorGlow {
+  0% {
+    background-position: 0% 50%;
+    box-shadow: 0 0 14px rgba(168, 85, 247, 0.5), inset 0 0 6px rgba(255, 242, 178, 0.5);
+  }
+  35% {
+    box-shadow: 0 0 28px rgba(246, 211, 101, 0.85), inset 0 0 12px rgba(255, 255, 255, 0.9);
+  }
+  100% {
+    background-position: 100% 50%;
+    box-shadow: 0 0 24px rgba(6, 182, 212, 0.8), inset 0 0 10px rgba(255, 255, 255, 0.7);
+  }
+}
+
+@keyframes conquerorRotate {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.avatar-container {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  border: 3px solid #090a12;
+  overflow: hidden;
+  position: relative;
+  z-index: 2;
+  background: #090a12;
+  box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.8);
+}
+
+.avatar-container img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 16px;
-  border: 2px solid var(--ibo-purple);
-  box-shadow: 0 0 18px var(--ibo-purple-glow);
-  position: relative;
-  z-index: 2;
+  animation: avatarZoomGlitchBeat 3.6s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+  will-change: transform, filter;
+  transform-origin: center center;
 }
 
-.logo-border-glow {
-  position: absolute;
-  inset: -3px;
-  border-radius: 18px;
-  background: var(--gradient-ibo);
-  z-index: 1;
-  opacity: 0.7;
-  filter: blur(5px);
+@keyframes avatarZoomGlitchBeat {
+  0% { transform: scale(1) translate3d(0, 0, 0); filter: brightness(1); }
+  15% { transform: scale(1.08); }
+  27% { transform: scale(1.12); }
+  29% { transform: scale(1.2) translate3d(1.5px, -1.5px, 0) rotate(-1deg); filter: brightness(1.18); }
+  32% { transform: scale(1.15) translate3d(-1px, 1px, 0) rotate(0.8deg); filter: brightness(1.05); }
+  35% { transform: scale(1.24); filter: brightness(1.25) drop-shadow(0 0 6px rgba(246, 211, 101, 0.7)); }
+  39% { transform: scale(1.16); }
+  50% { transform: scale(1.14); }
+  68% { transform: scale(1.05); }
+  82% { transform: scale(1.08) translate3d(-1px, 1px, 0); }
+  85% { transform: scale(0.98); }
+  100% { transform: scale(1); filter: brightness(1); }
 }
 
 .brand-copy {
@@ -137,19 +212,52 @@ header {
   min-width: 0;
 }
 
-.eyebrow-wrap {
-  display: flex;
+/* User Badge from Bio Web */
+.badge-user {
+  background: rgba(246, 211, 101, 0.08);
+  border: 1px solid rgba(246, 211, 101, 0.35);
+  backdrop-filter: blur(10px);
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-family: var(--font-tech);
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff4d0;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
+  gap: 7px;
+  margin-bottom: 6px;
+  box-shadow: 0 0 14px rgba(246, 211, 101, 0.2);
+}
+
+.badge-user i {
+  color: #00f2fe;
+  font-size: 13px;
+  filter: drop-shadow(0 0 6px rgba(0, 242, 254, 0.8));
+}
+
+.user-handle {
+  color: #fff4d0;
+  letter-spacing: 0.5px;
+}
+
+.eyebrow-divider {
+  color: rgba(255, 255, 255, 0.2);
+  margin: 0 2px;
+}
+
+.eyebrow-tag {
+  color: var(--ibo-cyan);
+  letter-spacing: 1.5px;
+  font-size: 11px;
 }
 
 .pulse-indicator {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: var(--ibo-cyan);
-  box-shadow: 0 0 10px var(--ibo-cyan);
+  box-shadow: 0 0 8px var(--ibo-cyan);
   animation: pulse-dot 1.8s infinite;
 }
 
@@ -158,31 +266,80 @@ header {
   50% { transform: scale(1.4); opacity: 0.6; }
 }
 
-.eyebrow {
-  font-family: var(--font-tech);
-  color: var(--ibo-cyan);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 2px;
-  text-transform: uppercase;
+/* Brand Title & Crown from Bio Web */
+.brand-title-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 2px 0 4px;
 }
 
-h1 {
-  font-family: var(--font-display);
-  font-size: 21px;
-  font-weight: 800;
-  letter-spacing: 0.5px;
-  background: linear-gradient(135deg, #ffffff 30%, #c084fc 100%);
+.name-box {
+  font-family: 'Outfit', 'Orbitron', var(--font-display);
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  margin: 0;
+  line-height: 1.2;
+  background: linear-gradient(90deg, #ffd875 0%, #fff7d6 15%, #7dd3fc 32%, #c084fc 50%, #f472b6 68%, #f6d365 85%, #ffd875 100%);
+  background-size: 300% 100%;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  line-height: 1.25;
+  animation: titleColorShift 4s linear infinite;
+  filter: drop-shadow(0 2px 12px rgba(212, 175, 55, 0.5));
+}
+
+@keyframes titleColorShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.name-crown {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  animation: crownFloat 3s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.name-crown i {
+  background: linear-gradient(180deg, #ffffff 0%, #fff7d6 20%, #f6d365 65%, #d4af37 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 10px rgba(246, 211, 101, 0.95)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.7));
+  transform: rotate(10deg);
+}
+
+.name-crown .crown-sparkle {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  font-size: 11px;
+  color: #fff7d6;
+  text-shadow: 0 0 8px #f6d365, 0 0 12px #ffffff;
+  animation: sparkleFlicker 1.8s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+@keyframes crownFloat {
+  0%, 100% { transform: translateY(0) scale(1.15); }
+  50% { transform: translateY(-4px) scale(1.22); }
+}
+
+@keyframes sparkleFlicker {
+  0% { opacity: 0.3; transform: scale(0.7) rotate(0deg); }
+  50% { opacity: 1; transform: scale(1.3) rotate(45deg); }
+  100% { opacity: 0.4; transform: scale(0.8) rotate(90deg); }
 }
 
 .subtitle {
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 500;
-  margin-top: 4px;
+  margin: 0;
 }
 
 #badge {
@@ -621,21 +778,30 @@ form[hidden] {
   
   header {
     gap: 12px;
-    padding: 12px;
+    padding: 12px 14px;
   }
   
-  .logo-box {
+  .conqueror-avatar-wrapper {
+    width: 68px;
+    height: 68px;
+  }
+  
+  .avatar-container {
     width: 54px;
     height: 54px;
   }
   
-  h1 {
+  .name-box {
     font-size: 16px;
   }
   
-  .eyebrow {
-    font-size: 11px;
-    letter-spacing: 1.2px;
+  .name-crown {
+    font-size: 17px;
+  }
+  
+  .badge-user {
+    font-size: 10.5px;
+    padding: 3px 10px;
   }
   
   .subtitle {
