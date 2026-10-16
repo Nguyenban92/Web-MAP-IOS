@@ -226,7 +226,13 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     publicURL: process.env.PUBLIC_URL,
     keyStoreURL: process.env.KEY_STORE_URL || 'https://script.google.com/macros/s/AKfycbzSd7BkzeAECIu1xywgr3Z00eQs-EjuteV45Z7YzUcqR1Haz-usFL0pRt_I2s8uObNZ/exec',
     keyStoreSecret: process.env.KEY_STORE_SECRET || 'ArvtD7gfP0Kc8FJDPEO3carFFGt3w3AF',
-    iceServers: process.env.ICE_SERVERS_JSON ? JSON.parse(process.env.ICE_SERVERS_JSON) : undefined,
+    iceServers: (() => {
+      if (!process.env.ICE_SERVERS_JSON) return undefined;
+      try {
+        const raw = JSON.parse(process.env.ICE_SERVERS_JSON);
+        return JSON.stringify(raw).includes('openrelay.metered.ca') ? undefined : raw;
+      } catch { return undefined; }
+    })(),
     turnURLs: process.env.TURN_URLS?.split(',').filter(Boolean),
     turnSecret: process.env.TURN_SECRET
   });
