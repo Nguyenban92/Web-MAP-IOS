@@ -276,20 +276,20 @@ header.bio-header {
 
 .name-box {
   font-family: 'Outfit', 'Orbitron', var(--font-display);
-  font-size: 24px;
+  font-size: 26px;
   font-weight: 900;
-  letter-spacing: 1px;
+  letter-spacing: 1.2px;
   margin: 0;
   line-height: 1.2;
-  background: linear-gradient(90deg, #ffd875 0%, #fff7d6 15%, #7dd3fc 32%, #c084fc 50%, #f472b6 68%, #f6d365 85%, #ffd875 100%);
+  background: linear-gradient(90deg, #d4af37 0%, #f6d365 22%, #fff7d6 38%, #ffffff 50%, #fff7d6 62%, #f6d365 78%, #d4af37 100%);
   background-size: 300% 100%;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  animation: titleColorShift 4s linear infinite;
-  filter: drop-shadow(0 2px 12px rgba(212, 175, 55, 0.5));
+  animation: goldColorShift 3.5s linear infinite;
+  filter: drop-shadow(0 2px 14px rgba(212, 175, 55, 0.65)) drop-shadow(0 0 18px rgba(246, 211, 101, 0.4));
 }
 
-@keyframes titleColorShift {
+@keyframes goldColorShift {
   0% { background-position: 0% 50%; }
   50% { background-position: 100% 50%; }
   100% { background-position: 0% 50%; }
@@ -949,11 +949,11 @@ form[hidden] {
   }
   
   .name-box {
-    font-size: 16px;
+    font-size: 18px;
   }
   
   .name-crown {
-    font-size: 17px;
+    font-size: 18px;
   }
   
   .badge-user {
