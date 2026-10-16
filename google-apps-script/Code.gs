@@ -1,4 +1,4 @@
-const SHEET_NAME = 'THOVE_NB_KEYS';
+const SHEET_NAME = 'MAGIAO_AOV_KEYS';
 const HEADERS = ['id','name','key','note','expiresAt','enabled','createdAt','updatedAt'];
 function doPost(e) {
   try {
@@ -19,5 +19,5 @@ function handle(action,payload){
 function getSheet(){const book=SpreadsheetApp.getActiveSpreadsheet();let sheet=book.getSheetByName(SHEET_NAME);if(!sheet){sheet=book.insertSheet(SHEET_NAME);sheet.getRange(1,1,1,HEADERS.length).setValues([HEADERS]);sheet.setFrozenRows(1);}return sheet;}
 function readRows(sheet){const last=sheet.getLastRow();if(last<2)return[];return sheet.getRange(2,1,last-1,HEADERS.length).getValues().map(objectFrom);}
 function objectFrom(row){const value={};HEADERS.forEach((k,i)=>value[k]=row[i]);value.enabled=value.enabled===true||String(value.enabled).toLowerCase()==='true';return value;}
-function validate(v,creating){if(!/^[a-f0-9]{16}$/.test(String(v.id)))throw Error('Invalid id');if(!String(v.name||'').trim()||String(v.name).length>80)throw Error('Invalid name');if(String(v.note||'').length>200)throw Error('Invalid note');if(v.expiresAt&&!/^\d{4}-\d{2}-\d{2}$/.test(String(v.expiresAt)))throw Error('Invalid expiry');if(creating&&(!String(v.key).startsWith('NB-')||String(v.key).length<27))throw Error('Invalid key');}
+function validate(v,creating){if(!/^[a-f0-9]{16}$/.test(String(v.id)))throw Error('Invalid id');if(!String(v.name||'').trim()||String(v.name).length>80)throw Error('Invalid name');if(String(v.note||'').length>200)throw Error('Invalid note');if(v.expiresAt&&!/^\d{4}-\d{2}-\d{2}$/.test(String(v.expiresAt)))throw Error('Invalid expiry');if(creating&&((!String(v.key).startsWith('MG-')&&!String(v.key).startsWith('NB-'))||String(v.key).length<27))throw Error('Invalid key');}
 function reply(value){return ContentService.createTextOutput(JSON.stringify(value)).setMimeType(ContentService.MimeType.JSON);}

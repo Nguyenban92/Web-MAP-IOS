@@ -41,7 +41,7 @@ export function createKeyStore({ url, secret, now = Date.now, fetchImpl = fetch 
     async create({ name, note = '', expiresAt = '' }) {
       name = String(name || '').trim(); note = String(note || '').trim(); expiresAt = String(expiresAt || '').trim();
       if (!name || name.length > 80 || note.length > 200 || !validDate(expiresAt)) throw Object.assign(new Error('Invalid key details'), { status: 400 });
-      const payload = { id: randomBytes(8).toString('hex'), name, note, expiresAt, enabled: true, key: `NB-${randomBytes(24).toString('base64url')}` };
+      const payload = { id: randomBytes(8).toString('hex'), name, note, expiresAt, enabled: true, key: `MG-${randomBytes(24).toString('base64url')}` };
       const value = await request('create', payload); cache = null; return value.key;
     },
     async update(id, changes) {

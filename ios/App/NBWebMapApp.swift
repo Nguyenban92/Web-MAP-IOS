@@ -52,7 +52,7 @@ final class AppModel: ObservableObject {
         guard let (data, response) = try? await URLSession.shared.data(for: req), (response as? HTTPURLResponse)?.statusCode == 200,
               let v = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
         let viewers=v["viewers"] as? Int ?? 0, live=v["liveViewers"] as? Int ?? 0
-        status = live>0 ? "Đang phát trực tiếp • \(live)/4 người xem" : ((v["paired"] as? Bool == true) ? "Đã ghép nối • Đang chờ người xem (\(viewers)/4)" : "Chờ bật THOVE-NB Broadcast")
+        status = live>0 ? "Đang phát trực tiếp • \(live)/4 người xem" : ((v["paired"] as? Bool == true) ? "Đã ghép nối • Đang chờ người xem (\(viewers)/4)" : "Chờ bật Ma Giáo Live Map Broadcast")
     }
     func save() throws {
         guard crop.valid else { throw failure("Vùng chọn không hợp lệ") }
@@ -129,9 +129,9 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     HStack(alignment:.top) {
                         VStack(alignment:.leading,spacing:2) {
-                            Text("THOVE-NB").font(.system(size:34,weight:.black,design:.rounded))
+                            Text("MA GIÁO").font(.system(size:34,weight:.black,design:.rounded))
                                 .foregroundStyle(LinearGradient(colors:[Studio.gold,Color(red:1,green:0.91,blue:0.58)],startPoint:.topLeading,endPoint:.bottomTrailing))
-                            Text("LIVE MAP NGUYỄN BÂN").font(.system(size:12,weight:.semibold,design:.rounded)).tracking(3).foregroundStyle(.white.opacity(0.78))
+                            Text("LIVE MAP AOV").font(.system(size:12,weight:.semibold,design:.rounded)).tracking(3).foregroundStyle(.white.opacity(0.78))
                         }
                         Spacer()
                         Label(model.server.isEmpty ? "Chưa kết nối":"Đã kết nối",systemImage:"circle.fill")
@@ -227,7 +227,7 @@ struct ContentView: View {
                         }.frame(maxWidth: .infinity, alignment: .leading).padding(.top, 8)
                     }.groupBoxStyle(StudioGroupBoxStyle())
                     Text(model.message).font(.callout).foregroundStyle(.orange)
-                    HStack { Text("Thông tin: Nguyễn Bân").font(.caption).foregroundStyle(.secondary); Spacer(); Link(destination:URL(string:"https://zalo.me/0779977792")!){Label("Liên hệ Zalo",systemImage:"message.fill").font(.caption.bold())} }
+                    HStack { Text("Ma Giáo Live Map AOV").font(.caption).foregroundStyle(.secondary); Spacer() }
                     Text("Giữ game cùng chiều với ảnh mẫu. Tắt thông báo trước khi phát: mọi nội dung xuất hiện trong vùng chọn đều có thể được truyền. Video WebRTC ưu tiên H.264, không truyền âm thanh.")
                         .font(.caption).foregroundStyle(.secondary)
                 }.padding()
@@ -323,7 +323,7 @@ struct RootView: View {
         TabView {
             ContentView().tabItem { Label("Phát", systemImage: "dot.radiowaves.left.and.right") }
             ViewerView().tabItem { Label("Xem / PiP", systemImage: "pip") }
-            NavigationStack { ScrollView { Text("THOVE-NB 0.5\nNguyễn Bân\n\nMáy phát: chọn ảnh game, căn vùng, lưu và tạo phòng. Bấm Chuẩn bị rồi chọn THOVE-NB Broadcast.\n\nNếu hình phát nằm ở góc đối diện vùng đã chọn, bật Đảo hướng phát 180°.\n\nTối đa 4 người xem dùng chung link và mật khẩu. Mỗi người mở PiP riêng.\n\nChỉnh vùng: dừng Broadcast, lưu vùng mới rồi tạo mã khởi động mới. Không truyền âm thanh. Hai mạng khó xuyên NAT có thể cần TURN.").padding() }.navigationTitle("Hướng dẫn") }.tabItem { Label("Hướng dẫn", systemImage: "questionmark.circle") }
+            NavigationStack { ScrollView { Text("Ma Giáo Live Map AOV\n\nMáy phát: chọn ảnh game, căn vùng, lưu và tạo phòng. Bấm Chuẩn bị rồi chọn Ma Giáo Live Map Broadcast.\n\nNếu hình phát nằm ở góc đối diện vùng đã chọn, bật Đảo hướng phát 180°.\n\nTối đa 4 người xem dùng chung link và mật khẩu. Mỗi người mở PiP riêng.\n\nChỉnh vùng: dừng Broadcast, lưu vùng mới rồi tạo mã khởi động mới. Không truyền âm thanh. Hai mạng khó xuyên NAT có thể cần TURN.").padding() }.navigationTitle("Hướng dẫn") }.tabItem { Label("Hướng dẫn", systemImage: "questionmark.circle") }
         }.tint(.mint)
     }
 }
@@ -337,7 +337,7 @@ struct PairingPanel: View {
                 Image(uiImage: img).interpolation(.none).resizable().scaledToFit().frame(width: 240, height: 240).padding(16).background(.white)
             }
             BroadcastButton().frame(width: 55, height: 55)
-            Text("Bấm biểu tượng → chọn THOVE-NB Broadcast. Giữ màn hình này đến khi báo Đã ghép nối. Mã dùng một lần, hết hạn sau 90 giây.").font(.caption)
+            Text("Bấm biểu tượng → chọn Ma Giáo Live Map Broadcast. Giữ màn hình này đến khi báo Đã ghép nối. Mã dùng một lần, hết hạn sau 90 giây.").font(.caption)
             Text(status).font(.caption).foregroundStyle(.mint)
         }.frame(maxWidth: .infinity)
     }

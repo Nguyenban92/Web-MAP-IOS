@@ -192,8 +192,8 @@ struct ViewerView:View {
             ScrollView {
                 VStack(alignment:.leading,spacing:20) {
                     VStack(alignment:.leading,spacing:2) {
-                        Text("THOVE-NB").font(.system(size:34,weight:.black,design:.rounded)).foregroundStyle(LinearGradient(colors:[Studio.gold,.yellow.opacity(0.8)],startPoint:.topLeading,endPoint:.bottomTrailing))
-                        Text("LIVE MAP NGUYỄN BÂN").font(.system(size:12,weight:.semibold,design:.rounded)).tracking(3).foregroundStyle(.white.opacity(0.78))
+                        Text("MA GIÁO").font(.system(size:34,weight:.black,design:.rounded)).foregroundStyle(LinearGradient(colors:[Studio.gold,.yellow.opacity(0.8)],startPoint:.topLeading,endPoint:.bottomTrailing))
+                        Text("LIVE MAP AOV").font(.system(size:12,weight:.semibold,design:.rounded)).tracking(3).foregroundStyle(.white.opacity(0.78))
                     }
                     HStack { Label("XEM TRỰC TIẾP",systemImage:"play.rectangle.fill").font(.headline).foregroundStyle(Studio.aqua); Spacer(); Text(engine.connected ? "ĐANG KẾT NỐI":"CHỜ KẾT NỐI").font(.caption2.bold()).foregroundStyle(engine.connected ? .green:.secondary).padding(.horizontal,10).padding(.vertical,6).background(.black.opacity(0.3),in:Capsule()) }
                     Text("Nhận vùng bản đồ và mở cửa sổ siêu gọn khi chơi game.").foregroundStyle(.secondary)
@@ -215,7 +215,7 @@ struct ViewerView:View {
                         Toggle("Chỉ dùng TURN",isOn:$forceRelay).disabled(engine.connected)
                         Text("Mặc định dùng P2P, tự thử TURN nếu máy chủ đã cấu hình. Chỉ bật ép TURN khi có dịch vụ chuyển tiếp. RTT là thời gian mạng khứ hồi, không phải độ trễ toàn bộ hình ảnh.").font(.caption).foregroundStyle(.secondary)
                     }
-                    HStack { Text("Tối đa 4 người xem • Nguyễn Bân").font(.caption).foregroundStyle(.secondary); Spacer(); Link("Zalo",destination:URL(string:"https://zalo.me/0779977792")!).font(.caption.bold()) }
+                    HStack { Text("Tối đa 4 người xem • Ma Giáo Live Map AOV").font(.caption).foregroundStyle(.secondary); Spacer() }
                 }.textFieldStyle(.roundedBorder).padding()
             }.background(LinearGradient(colors:[Studio.background,Color(red:0.01,green:0.08,blue:0.14),Studio.background],startPoint:.topLeading,endPoint:.bottomTrailing).ignoresSafeArea()).navigationTitle("Xem / PiP")
         }

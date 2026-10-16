@@ -17,5 +17,5 @@ test('managed key store handles active, disabled and expired keys', async () => 
   assert.equal(await store.authorize(keys[1].key),null);
   assert.equal(await store.authorize(keys[2].key),null);
   const created=await store.create({name:'New',note:'Test',expiresAt:''});
-  assert.match(created.key,/^NB-/);
+  assert.match(created.key,/^(MG|NB)-/);
 });

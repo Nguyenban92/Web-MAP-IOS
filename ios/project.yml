@@ -27,7 +27,7 @@ targets:
     info:
       path: App/Info.plist
       properties:
-        CFBundleDisplayName: THOVE-NB
+        CFBundleDisplayName: Ma Giáo AOV
         UIBackgroundModes: [audio]
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
@@ -52,7 +52,7 @@ targets:
     info:
       path: Broadcast/Info.plist
       properties:
-        CFBundleDisplayName: Live - THOVE-NB
+        CFBundleDisplayName: Live - Ma Giáo AOV
         NSExtension:
           NSExtensionPointIdentifier: com.apple.broadcast-services-upload
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).SampleHandler

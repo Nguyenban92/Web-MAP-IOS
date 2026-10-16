@@ -1,4 +1,4 @@
-name: Build NB Web Map IPA
+name: Build Ma Giáo Live Map IPA
 on:
   workflow_dispatch:
     inputs:
