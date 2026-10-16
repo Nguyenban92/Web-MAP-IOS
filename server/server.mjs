@@ -117,8 +117,7 @@ export function createApp({ adminKey, publisherKeys = '', publicURL, now = Date.
         limited('create:' + req.socket.remoteAddress, 20, 60000);
         const publisher = await publisherFor(bearer(req));
         if (!publisher) throw fail(401, 'Unauthorized');
-        cleanup(); if (rooms.size >= 25) throw fail(503, 'Room limit reached');
-        if (!publisher.admin && [...rooms.values()].some(room => room.owner === publisher.id)) throw fail(409, 'This publisher already has an active room');
+        cleanup(); if (rooms.size >= 50) throw fail(503, 'Room limit reached');
         let input; try { input = JSON.parse((await body(req, 2048)).toString()); } catch (e) { throw e.status ? e : fail(400, 'Invalid JSON'); }
         if (typeof input?.password !== 'string' || input.password.length > 128) throw fail(400, 'Invalid password');
         const salt = randomBytes(16);

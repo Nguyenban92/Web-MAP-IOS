@@ -64,13 +64,13 @@ test('payload limits, MIME and web headers', async t => {
   assert.match(page.headers.get('content-security-policy'), /frame-ancestors 'none'/);
   assert.equal((await call('/../server.mjs')).status, 404);
 });
-test('separate publisher keys create isolated single active rooms', async t => {
+test('separate publisher keys create isolated active rooms', async t => {
   const alice = 'alice-private-publisher-key-123456', bob = 'bob-private-publisher-key-12345678';
   const { call } = await fixture(t, { publisherKeys: `alice=${alice};bob=${bob}` });
   const make = auth => call('/api/rooms', 'POST', auth, JSON.stringify({ password: '' }));
   const first = await make(alice); assert.equal(first.status, 201);
   const room = await first.json();
-  assert.equal((await make(alice)).status, 409);
+  assert.equal((await make(alice)).status, 201); // all keys can now create multiple rooms
   assert.equal((await make(bob)).status, 201);
   assert.equal((await make(key)).status, 201); // master ADMIN_KEY remains valid
   assert.equal((await call(`/api/rooms/${room.id}`, 'DELETE', room.publishToken)).status, 204);
