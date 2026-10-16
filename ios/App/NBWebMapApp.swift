@@ -10,7 +10,10 @@ struct NBWebMapApp: App {
 
 @MainActor
 final class AppModel: ObservableObject {
-    @Published var server = UserDefaults.standard.string(forKey: "server") ?? ""
+    @Published var server = {
+        let saved = UserDefaults.standard.string(forKey: "server") ?? ""
+        return saved.isEmpty ? "https://nb-web-map-nguyenban92.onrender.com" : saved
+    }()
     @Published var adminKey = ""
     @Published var password = ""
     @Published var crop = Crop()
@@ -160,7 +163,7 @@ struct ContentView: View {
                     }
                     GroupBox("1. Máy chủ") {
                         VStack(spacing: 12) {
-                            HStack { TextField("https://map.example.com", text: $model.server).textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL).disabled(model.room != nil); Button("Dán"){model.server=UIPasteboard.general.string ?? model.server}.disabled(model.room != nil) }
+                            HStack { TextField("https://nb-web-map-nguyenban92.onrender.com", text: $model.server).textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL).disabled(model.room != nil); Button("Dán"){model.server=UIPasteboard.general.string ?? model.server}.disabled(model.room != nil) }
                             HStack { SecureField("Khóa tạo phòng (ADMIN_KEY)", text: $model.adminKey); Button("Dán"){model.adminKey=UIPasteboard.general.string ?? model.adminKey} }
                             SecureField("Mật khẩu người xem (tùy chọn)", text: $model.password)
                         }.textFieldStyle(.roundedBorder).padding(.top, 8)

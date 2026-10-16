@@ -3,17 +3,30 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Ma Giáo Live Map AOV</title>
+  <title>Ma Giáo Live Map AOV · IBO HUD</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=Rajdhani:wght@500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
+  <div class="cyber-bg" aria-hidden="true"></div>
+  <div class="cyber-glow glow-1" aria-hidden="true"></div>
+  <div class="cyber-glow glow-2" aria-hidden="true"></div>
+
   <main>
     <header>
-      <img class="logo" src="/thove-nb-logo.jpg" alt="Logo Ma Giáo Live Map AOV">
+      <div class="logo-box">
+        <img class="logo" src="/thove-nb-logo.jpg" alt="Logo Ma Giáo Live Map AOV">
+        <span class="logo-border-glow"></span>
+      </div>
       <div class="brand-copy">
-        <p class="eyebrow">MA GIÁO · LIVE VIEW</p>
+        <div class="eyebrow-wrap">
+          <span class="pulse-indicator"></span>
+          <p class="eyebrow">IBO SYSTEM · RADAR HUD</p>
+        </div>
         <h1>MA GIÁO LIVE MAP AOV</h1>
-        <p class="subtitle">Hệ thống truyền hình ảnh trực tiếp bảo mật</p>
+        <p class="subtitle">Hệ thống truyền hình ảnh góc nhìn Mini-Map thời gian thực</p>
       </div>
       <span id="badge"><i aria-hidden="true"></i>CHỜ TÍN HIỆU</span>
     </header>
@@ -23,27 +36,41 @@
       <span class="corner top-right" aria-hidden="true"></span>
       <span class="corner bottom-left" aria-hidden="true"></span>
       <span class="corner bottom-right" aria-hidden="true"></span>
+      <div class="stage-scanline" aria-hidden="true"></div>
+      <div class="stage-crosshair" aria-hidden="true"></div>
+      
       <video id="map" autoplay muted playsinline hidden aria-label="Vùng bản đồ được chia sẻ"></video>
       <div id="placeholder">
-        <span class="signal-icon" aria-hidden="true">⌁</span>
-        <strong>Sẵn sàng nhận hình ảnh trực tiếp</strong>
-        <span>Mở đúng liên kết do người phát gửi và nhập mật khẩu phòng để bắt đầu xem.</span>
+        <div class="radar-scanner">
+          <div class="scanner-ring ring-1"></div>
+          <div class="scanner-ring ring-2"></div>
+          <div class="scanner-line"></div>
+          <span class="signal-icon" aria-hidden="true">◈</span>
+        </div>
+        <strong>SẴN SÀNG NHẬN TÍN HIỆU RADAR</strong>
+        <span>Mở đúng liên kết do máy phát cung cấp và nhập mật khẩu phòng để kết nối.</span>
       </div>
     </section>
 
     <form id="join">
-      <label for="password">Mật khẩu phòng
-        <input id="password" type="password" maxlength="128" autocomplete="current-password" placeholder="Nhập mật khẩu do người phát cung cấp">
+      <label for="password">
+        <span class="label-text">MẬT KHẨU PHÒNG TRUY CẬP</span>
+        <div class="input-wrap">
+          <span class="input-icon" aria-hidden="true">🔑</span>
+          <input id="password" type="password" maxlength="128" autocomplete="current-password" placeholder="Nhập mật khẩu do máy phát cung cấp (nếu có)...">
+        </div>
       </label>
-      <button class="join-button" type="submit">KẾT NỐI PHÒNG</button>
+      <button class="join-button" type="submit">
+        <span class="btn-label">⚡ KẾT NỐI PHÒNG</span>
+      </button>
     </form>
 
     <footer>
       <div class="viewer-actions">
-        <button id="pip" class="pip" type="button"><span aria-hidden="true">▣</span>Cửa sổ nhỏ</button>
+        <button id="pip" class="pip" type="button"><span class="icon-pip" aria-hidden="true">▣</span>Cửa sổ PiP</button>
         <button id="stop" class="stop" type="button"><span aria-hidden="true">■</span>Dừng xem</button>
       </div>
-      <p id="status" role="status"><b>WebRTC bảo mật</b> · Chưa kết nối</p>
+      <p id="status" role="status"><b>WebRTC Bảo Mật</b> · Đang chờ kết nối phòng</p>
       <button id="fullscreen" class="fullscreen" type="button"><span aria-hidden="true">⛶</span>Toàn màn hình</button>
     </footer>
 
@@ -52,7 +79,8 @@
       <span>Tối đa 4 người xem</span>
       <span>Mật khẩu phòng</span>
       <span>Không lưu video</span>
-      <span>Ma Giáo Live Map AOV</span>
+      <span>IBO Engine</span>
+      <span class="brand-tag">Ma Giáo Live Map AOV</span>
     </div>
   </main>
   <script src="/viewer.js"></script>
