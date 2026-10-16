@@ -221,6 +221,15 @@ export function createApp({ adminKey, publisherKeys = '', publicURL, now = Date.
   return server;
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const app = createApp({ adminKey: process.env.ADMIN_KEY, publisherKeys: process.env.PUBLISHER_KEYS, publicURL: process.env.PUBLIC_URL, keyStoreURL: process.env.KEY_STORE_URL, keyStoreSecret: process.env.KEY_STORE_SECRET, iceServers: process.env.ICE_SERVERS_JSON ? JSON.parse(process.env.ICE_SERVERS_JSON) : undefined, turnURLs: process.env.TURN_URLS?.split(',').filter(Boolean), turnSecret: process.env.TURN_SECRET });
+  const app = createApp({
+    adminKey: process.env.ADMIN_KEY,
+    publisherKeys: process.env.PUBLISHER_KEYS,
+    publicURL: process.env.PUBLIC_URL,
+    keyStoreURL: process.env.KEY_STORE_URL || 'https://script.google.com/macros/s/AKfycbzSd7BkzeAECIu1xywgr3Z00eQs-EjuteV45Z7YzUcqR1Haz-usFL0pRt_I2s8uObNZ/exec',
+    keyStoreSecret: process.env.KEY_STORE_SECRET || 'ArvtD7gfP0Kc8FJDPEO3carFFGt3w3AF',
+    iceServers: process.env.ICE_SERVERS_JSON ? JSON.parse(process.env.ICE_SERVERS_JSON) : undefined,
+    turnURLs: process.env.TURN_URLS?.split(',').filter(Boolean),
+    turnSecret: process.env.TURN_SECRET
+  });
   app.listen(Number(process.env.PORT || 8080), '0.0.0.0', () => console.log('NB Web Map listening'));
 }
