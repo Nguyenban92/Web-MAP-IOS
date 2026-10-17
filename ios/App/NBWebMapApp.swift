@@ -484,6 +484,17 @@ extension View {
     }
 }
 
+struct StudioGroupBoxStyle: GroupBoxStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            configuration.label.font(.headline.bold()).foregroundStyle(Studio.gold)
+            configuration.content
+        }
+        .padding(16)
+        .studioCard()
+    }
+}
+
 struct CropEditor: View {
     let image: UIImage
     @Binding var crop: Crop
