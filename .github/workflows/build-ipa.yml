@@ -1,10 +1,17 @@
 name: Build Ma Giáo Live Map IPA
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'ios/**'
+      - '.github/workflows/build-ipa.yml'
+      - 'scripts/**'
   workflow_dispatch:
     inputs:
       bundle_id:
         description: 'Bundle ID matching your signing profile'
-        required: true
+        required: false
         default: vn.nguyenban.nbwebmap
 permissions:
   contents: read
@@ -21,7 +28,7 @@ jobs:
         run: node --test server/test/*.test.mjs
       - name: Configure identifiers
         env:
-          APP_BUNDLE_ID: ${{ inputs.bundle_id }}
+          APP_BUNDLE_ID: ${{ inputs.bundle_id || 'vn.nguyenban.nbwebmap' }}
         run: python3 scripts/configure.py
       - name: Install XcodeGen
         run: brew install xcodegen
