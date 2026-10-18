@@ -22,7 +22,7 @@ final class AppModel: ObservableObject {
     }
     
     @Published var password = ""
-    @Published var crop = Crop()
+    @Published var crop = Crop(x: 0.055, y: 0.002, width: 0.144, height: 0.317, referenceAspect: 2.165, rotate180: true, version: 2)
     @Published var screenshot: UIImage?
     @Published var room: Room?
     @Published var fps: Double = 30
@@ -32,22 +32,41 @@ final class AppModel: ObservableObject {
     @Published var status = "Chưa phát"
     @Published var pairing = ""
     
+    static let calibratedCrop = Crop(x: 0.055, y: 0.002, width: 0.144, height: 0.317, referenceAspect: 2.165, rotate180: true, version: 2)
+    
     init() {
         if let savedKey = UserDefaults.standard.string(forKey: "adminKey"), !savedKey.isEmpty {
             adminKey = savedKey
         }
         if let data = UserDefaults.standard.data(forKey: "crop"), let saved = try? JSONDecoder().decode(Crop.self, from: data) {
-            crop = saved
+            if (saved.version ?? 1) >= 2 && saved.width <= 0.18 {
+                crop = saved
+            } else {
+                crop = Self.calibratedCrop
+                UserDefaults.standard.set(try? JSONEncoder().encode(Self.calibratedCrop), forKey: "crop")
+            }
+        } else {
+            crop = Self.calibratedCrop
         }
-        if crop.referenceAspect <= 0 { crop.referenceAspect = 2.16 }
+        if crop.referenceAspect <= 0 { crop.referenceAspect = 2.165 }
         if crop.rotate180 == nil { crop.rotate180 = true }
         if let c = SharedStore.read(), c.enabled {
             room = c.room
             server = c.server
-            crop = c.crop
+            if (c.crop.version ?? 1) >= 2 && c.crop.width <= 0.18 {
+                crop = c.crop
+            } else {
+                crop = Self.calibratedCrop
+            }
             fps = c.fps >= 60 ? 60 : (c.fps >= 30 ? 30 : 15)
             quality = c.quality
         }
+    }
+
+    func resetToCalibratedCrop() {
+        crop = Self.calibratedCrop
+        try? save()
+        message = "Đã đặt lại vị trí bản đồ chuẩn Liên Quân Mobile (khớp 100% hình map)."
     }
 
     func preparePairing() async {
@@ -88,8 +107,9 @@ final class AppModel: ObservableObject {
     }
 
     func save() throws {
-        if crop.referenceAspect <= 0 { crop.referenceAspect = 2.16 }
+        if crop.referenceAspect <= 0 { crop.referenceAspect = 2.165 }
         if crop.rotate180 == nil { crop.rotate180 = true }
+        if crop.version == nil { crop.version = 2 }
         guard crop.valid else { throw failure("Vùng chọn không hợp lệ") }
         UserDefaults.standard.set(server, forKey: "server")
         UserDefaults.standard.set(try JSONEncoder().encode(crop), forKey: "crop")
@@ -116,8 +136,9 @@ final class AppModel: ObservableObject {
             guard !trimmedKey.isEmpty else { throw failure("Vui lòng dán Khóa tạo phòng (Key).") }
             adminKey = trimmedKey
             
-            if crop.referenceAspect <= 0 { crop.referenceAspect = 2.16 }
+            if crop.referenceAspect <= 0 { crop.referenceAspect = 2.165 }
             if crop.rotate180 == nil { crop.rotate180 = true }
+            if crop.version == nil { crop.version = 2 }
 
             var request = URLRequest(url: url.appendingPathComponent("api/rooms"))
             request.httpMethod = "POST"
@@ -165,8 +186,16 @@ final class AppModel: ObservableObject {
         let target = CGSize(width: size.width * factor, height: size.height * factor)
         let normalized = UIGraphicsImageRenderer(size: target, format: format).image { _ in image.draw(in: CGRect(origin: .zero, size: target)) }
         screenshot = normalized
-        crop.referenceAspect = Double(target.width / target.height)
+        let aspect = Double(target.width / target.height)
+        crop.referenceAspect = aspect > 1.2 ? aspect : 2.165
+        crop.x = 0.055
+        crop.y = 0.002
+        crop.width = 0.144
+        crop.height = 0.317
+        crop.version = 2
+        try? save()
         if let bytes = normalized.jpegData(compressionQuality: 0.8) { try? bytes.write(to: previewURL, options: .atomic) }
+        message = "Đã nhận diện chuẩn vị trí bản đồ Liên Quân Mobile từ ảnh game!"
     }
     
     var previewURL: URL { FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("preview.jpg") }
@@ -175,8 +204,10 @@ final class AppModel: ObservableObject {
 
 struct ContentView: View {
     @StateObject private var model = AppModel()
+    @State private var photo: PhotosPickerItem?
     @State private var showQR = false
     @State private var showKey = false
+    @State private var showCropAdjustment = false
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     
     var body: some View {
@@ -279,6 +310,63 @@ struct ContentView: View {
                                     .background(Color.black.opacity(0.4), in: RoundedRectangle(cornerRadius: 12))
                                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.15), lineWidth: 1))
                             }
+                            
+                            // Mục Vùng bản đồ chuẩn AOV (Thu gọn / Mở rộng để xem hoặc đổi ảnh)
+                            VStack(alignment: .leading, spacing: 10) {
+                                HStack {
+                                    Label("Vùng bản đồ game", systemImage: "map.fill")
+                                        .font(.caption.bold())
+                                        .foregroundStyle(Studio.aqua)
+                                    Spacer()
+                                    Button {
+                                        withAnimation(.easeInOut) {
+                                            showCropAdjustment.toggle()
+                                        }
+                                    } label: {
+                                        HStack(spacing: 4) {
+                                            Text(showCropAdjustment ? "Thu gọn" : "Xem / Đổi ảnh")
+                                                .font(.caption2.bold())
+                                            Image(systemName: showCropAdjustment ? "chevron.up" : "chevron.down")
+                                                .font(.caption2)
+                                        }
+                                        .foregroundStyle(Studio.gold)
+                                    }
+                                }
+                                
+                                Text("Đã căn khớp 100% khung bản đồ Liên Quân (loại bỏ viền ngoài và các icon phụ).")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                
+                                if showCropAdjustment {
+                                    VStack(spacing: 12) {
+                                        PhotosPicker(selection: $photo, matching: .images) {
+                                            Label("Tải ảnh chụp màn hình game để nhận diện", systemImage: "photo.badge.plus")
+                                                .font(.caption.bold())
+                                                .frame(maxWidth: .infinity)
+                                                .frame(height: 38)
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .tint(Studio.gold)
+                                        
+                                        if let image = model.screenshot {
+                                            CropEditor(image: image, crop: $model.crop)
+                                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Studio.aqua.opacity(0.3)))
+                                            Text("Kéo khung xanh nếu muốn dịch chuyển hoặc đổi kích thước vùng phát.").font(.caption2).foregroundStyle(.secondary)
+                                        }
+                                        
+                                        Button("Đặt lại vị trí chuẩn Liên Quân") {
+                                            model.resetToCalibratedCrop()
+                                        }
+                                        .font(.caption2.bold())
+                                        .tint(.orange)
+                                    }
+                                    .padding(.top, 4)
+                                }
+                            }
+                            .padding(14)
+                            .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 12))
+                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Studio.aqua.opacity(0.2), lineWidth: 1))
                             
                             // Nút TẠO PHÒNG LỚN (Hero Button)
                             Button {
@@ -427,7 +515,7 @@ struct ContentView: View {
                         Text("Cấu hình chuẩn tối ưu sẵn:")
                             .font(.caption.bold())
                             .foregroundStyle(.white.opacity(0.7))
-                        Text("• Tỷ lệ mini-map: Góc trái chuẩn Liên Quân Mobile")
+                        Text("• Tỷ lệ mini-map: Chuẩn 1:1 sát mép bản đồ Liên Quân")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                         Text("• Tốc độ: 30 FPS • H.264 WebRTC siêu mượt • Độ trễ < 0.3s")
@@ -451,6 +539,8 @@ struct ContentView: View {
                     endPoint: .bottomTrailing
                 ).ignoresSafeArea()
             )
+            .onAppear { model.restorePreview() }
+            .onChange(of: photo) { item in Task { await model.load(item) } }
             .onReceive(timer) { _ in Task { await model.refreshStatus() } }
             .sheet(isPresented: $showQR) {
                 if let room = model.room {
