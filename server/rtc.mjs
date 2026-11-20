@@ -1,33 +1,83 @@
 import { createHmac } from 'node:crypto';
 
+const CLOUDFLARE_KEY_ID = process.env.CLOUDFLARE_TURN_KEY_ID || '8dd1bf47f60db94223b0a9774980150c';
+const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_TURN_API_TOKEN || '1644015cc3c5c988f7039f27b8cb86d733e6dd6d88623b9af15eef9a0acd3927';
+
+let dynamicCloudflareICE = null;
+let lastCloudflareFetch = 0;
+let cloudflareFetching = false;
+
+async function refreshCloudflareCredentials(fetchImpl = fetch) {
+  if (!CLOUDFLARE_KEY_ID || !CLOUDFLARE_API_TOKEN || cloudflareFetching) return;
+  cloudflareFetching = true;
+  try {
+    const res = await fetchImpl(`https://rtc.live.cloudflare.com/v1/turn/keys/${CLOUDFLARE_KEY_ID}/credentials/generate-ice-servers`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${CLOUDFLARE_API_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ ttl: 86400 })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (Array.isArray(data.iceServers) && data.iceServers.length > 0) {
+      dynamicCloudflareICE = data.iceServers;
+      lastCloudflareFetch = Date.now();
+    }
+  } catch {
+    // Fall back to static credentials if offline
+  } finally {
+    cloudflareFetching = false;
+  }
+}
+
+// Initial fetch if in live server environment
+if (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'test') {
+  refreshCloudflareCredentials().catch(() => {});
+}
+
 const DEFAULT_ICE_SERVERS = [
   {
     urls: [
+      'stun:stun.cloudflare.com:3478',
+      'stun:stun.cloudflare.com:443',
       'stun:stun.l.google.com:19302',
-      'stun:stun1.l.google.com:19302',
-      'stun:stun2.l.google.com:19302',
-      'stun:stun.relay.metered.ca:80'
+      'stun:stun1.l.google.com:19302'
     ]
   },
   {
     urls: [
-      'turn:global.relay.metered.ca:80',
-      'turn:global.relay.metered.ca:80?transport=tcp',
-      'turn:global.relay.metered.ca:443',
-      'turns:global.relay.metered.ca:443?transport=tcp'
+      'turn:turn.cloudflare.com:3478?transport=udp',
+      'turn:turn.cloudflare.com:3478?transport=tcp',
+      'turns:turn.cloudflare.com:5349?transport=tcp',
+      'turn:turn.cloudflare.com:443?transport=udp',
+      'turn:turn.cloudflare.com:80?transport=tcp',
+      'turns:turn.cloudflare.com:443?transport=tcp'
     ],
-    username: 'd732191b5b2bc7f77d047ad5',
-    credential: 'i10kEwRAvZVGwJoD'
+    username: 'g0dcb5cdfe6c271e7567ea86329aceea18930ca5151a7c9d2690a8af1aca7faf',
+    credential: '4bf67e65e9f8c52bff12ecd7943c650ad109a1ae265c5b233e04f7c3556381dc'
   }
 ];
 
-export function createRTC({ now, fail, limited, iceServers = DEFAULT_ICE_SERVERS, turnURLs = [], turnSecret = '', maxViewers = 4 }) {
+export function createRTC({ now, fail, limited, iceServers = DEFAULT_ICE_SERVERS, turnURLs = [], turnSecret = '', maxViewers = 4, fetchImpl = fetch }) {
   if (!Array.isArray(iceServers) || !Array.isArray(turnURLs)) throw new Error('Invalid ICE configuration');
   iceServers=iceServers.map(e=>{const urls=[].concat(e.urls||[]);if(!urls.length||!urls.every(u=>typeof u==='string'&&/^(stun|stuns|turn|turns):/.test(u)))throw new Error('Invalid ICE URL');return{...e,urls};});
   if(Boolean(turnSecret)!==Boolean(turnURLs.length)||!turnURLs.every(u=>typeof u==='string'&&/^turns?:/.test(u)))throw new Error('TURN_URLS and TURN_SECRET must be configured together');
+  const isDefaultICE = iceServers === DEFAULT_ICE_SERVERS;
   const fresh=()=>({epoch:0,viewer:null,viewerAt:0,publisherAt:0,offer:null,answer:null,publisherCandidates:[],viewerCandidates:[]});
   const reset=r=>{r.epoch++;r.offer=null;r.answer=null;r.publisherCandidates=[];r.viewerCandidates=[];};
-  const ice=(id,slot)=>{const list=structuredClone(iceServers);if(turnSecret&&turnURLs.length){const username=`${Math.floor(now()/1000)+9000}:${id}:${slot}`;list.push({urls:turnURLs,username,credential:createHmac('sha1',turnSecret).update(username).digest('base64')});}return list;};
+  const ice=(id,slot)=>{
+    if (isDefaultICE && (!lastCloudflareFetch || Date.now() - lastCloudflareFetch > 12 * 3600 * 1000)) {
+      refreshCloudflareCredentials(fetchImpl).catch(() => {});
+    }
+    const currentBase = (isDefaultICE && dynamicCloudflareICE) ? dynamicCloudflareICE : iceServers;
+    const list=structuredClone(currentBase);
+    if(turnSecret&&turnURLs.length){
+      const username=`${Math.floor(now()/1000)+9000}:${id}:${slot}`;
+      list.push({urls:turnURLs,username,credential:createHmac('sha1',turnSecret).update(username).digest('base64')});
+    }
+    return list;
+  };
   function select(room,key,publisher,requested,joining){
     room.rtcSlots||=Array.from({length:maxViewers},fresh);room.viewerSlots||=new Map();
     room.rtcSlots.forEach(r=>{if(r.viewer&&now()-r.viewerAt>25000){room.viewerSlots.delete(r.viewer);r.viewer=null;reset(r);}});
@@ -49,6 +99,7 @@ export function createRTC({ now, fail, limited, iceServers = DEFAULT_ICE_SERVERS
         else throw fail(400,'Unknown signal');}}
     }else if(method!=='GET')throw fail(405,'Method not allowed');
     if(publisher)r.publisherAt=now();else{if(r.viewer!==key)throw fail(409,'Join first');r.viewerAt=now();}
-    return{slot,epoch:r.epoch,viewer:!!r.viewer,publisherOnline:now()-r.publisherAt<15000&&r.publisherAt>0,offer:r.offer,answer:r.answer,candidates:publisher?r.viewerCandidates:r.publisherCandidates,iceServers:ice(id,slot),relayAvailable:!!turnSecret&&turnURLs.length>0||iceServers.some(s=>[].concat(s.urls).some(u=>/^turns?:/.test(u)))};
+    const activeIce = ice(id,slot);
+    return{slot,epoch:r.epoch,viewer:!!r.viewer,publisherOnline:now()-r.publisherAt<15000&&r.publisherAt>0,offer:r.offer,answer:r.answer,candidates:publisher?r.viewerCandidates:r.publisherCandidates,iceServers:activeIce,relayAvailable:!!turnSecret&&turnURLs.length>0||activeIce.some(s=>[].concat(s.urls).some(u=>/^turns?:/.test(u)))};
   };
 }
