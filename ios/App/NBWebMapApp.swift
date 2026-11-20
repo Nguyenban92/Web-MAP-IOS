@@ -115,9 +115,9 @@ final class AppModel: ObservableObject {
         if live > 0 {
             status = "Đang phát trực tiếp • \(live)/4 người xem"
         } else if pubOnline {
-            status = viewers > 0 ? "Đang truyền hình ảnh • \(viewers)/4 người xem" : "Máy phát online • Chờ người xem"
+            status = viewers > 0 ? "Đang truyền hình ảnh • \(viewers)/4 người xem" : "Đang phát sóng • Chờ người xem"
         } else {
-            status = viewers > 0 ? "⚠️ CHƯA BẬT PHÁT • Có \(viewers) người đang chờ xem" : "⚠️ CHƯA BẬT PHÁT • Chạm nút tròn để phát"
+            status = viewers > 0 ? "Chờ máy phát • Có \(viewers) người xem" : "Chờ tín hiệu máy phát"
         }
     }
 
@@ -200,7 +200,7 @@ final class AppModel: ObservableObject {
             try save()
             let config = BroadcastConfig(server: server, room: createdRoom, crop: crop, fps: fps, quality: quality, enabled: true)
             try? SharedStore.save(config)
-            message = "Phòng đã sẵn sàng! Bật Broadcast để vào game phát ngay."
+            message = ""
         } catch { message = error.localizedDescription }
     }
 
@@ -288,66 +288,89 @@ struct ContentView: View {
                     if model.room == nil {
                         // Card Tạo phòng
                         VStack(alignment: .leading, spacing: 18) {
-                            // Bản quyền VIP đã kích hoạt vĩnh viễn
-                            HStack(spacing: 8) {
-                                Image(systemName: "checkmark.seal.fill")
-                                    .foregroundStyle(Studio.gold)
-                                Text("Bản quyền Ma Giáo VIP: Đã kích hoạt sẵn")
-                                    .font(.caption.bold())
-                                    .foregroundStyle(Studio.gold)
+                            HStack {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "crown.fill")
+                                        .foregroundStyle(Studio.gold)
+                                    Text("MA GIÁO VIP")
+                                        .font(.caption.bold())
+                                        .foregroundStyle(Studio.gold)
+                                }
                                 Spacer()
+                                HStack(spacing: 5) {
+                                    Circle().fill(Color.green).frame(width: 7, height: 7)
+                                    Text("SẴN SÀNG")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundStyle(.green)
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.green.opacity(0.12), in: Capsule())
                             }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Studio.gold.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
-                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Studio.gold.opacity(0.3), lineWidth: 1))
                             
                             VStack(alignment: .leading, spacing: 8) {
-                                Label("Mật khẩu người xem (Tùy chọn)", systemImage: "lock.shield")
-                                    .font(.subheadline.bold())
+                                Label("MẬT KHẨU", systemImage: "lock.shield.fill")
+                                    .font(.caption.bold())
                                     .foregroundStyle(.white.opacity(0.85))
                                 
-                                SecureField("Để trống nếu không đặt mật khẩu", text: $model.password)
+                                SecureField("Mặc định để trống", text: $model.password)
                                     .font(.subheadline)
                                     .padding(12)
                                     .background(Color.black.opacity(0.4), in: RoundedRectangle(cornerRadius: 12))
                                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.15), lineWidth: 1))
-                                
-                                Text("Nếu đặt mật khẩu, người xem phải nhập đúng mật khẩu mới vào được phòng.")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
                             }
                             
-                            // Mục Vùng bản đồ chuẩn AOV (Thu gọn / Mở rộng để xem hoặc đổi ảnh)
-                            VStack(alignment: .leading, spacing: 10) {
-                                HStack {
-                                    Label("Vùng bản đồ game", systemImage: "map.fill")
-                                        .font(.caption.bold())
-                                        .foregroundStyle(Studio.aqua)
-                                    Spacer()
-                                    Button {
-                                        withAnimation(.easeInOut) {
-                                            showCropAdjustment.toggle()
-                                        }
-                                    } label: {
-                                        HStack(spacing: 4) {
-                                            Text(showCropAdjustment ? "Thu gọn" : "Xem / Đổi ảnh")
-                                                .font(.caption2.bold())
-                                            Image(systemName: showCropAdjustment ? "chevron.up" : "chevron.down")
-                                                .font(.caption2)
-                                        }
-                                        .foregroundStyle(Studio.gold)
+                            // Nút TẠO PHÒNG LỚN (Hero Button)
+                            Button {
+                                Task { await model.createRoom() }
+                            } label: {
+                                HStack(spacing: 10) {
+                                    if model.working {
+                                        ProgressView().tint(.black)
+                                    } else {
+                                        Image(systemName: "bolt.fill")
+                                            .font(.title3)
                                     }
+                                    Text(model.working ? "ĐANG TẠO PHÒNG..." : "TẠO PHÒNG")
+                                        .font(.system(size: 18, weight: .black, design: .rounded))
                                 }
-                                
-                                Text("Đã căn khớp 100% khung bản đồ Liên Quân (loại bỏ viền ngoài và các icon phụ).")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
+                                .foregroundStyle(.black)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 54)
+                                .background(
+                                    LinearGradient(
+                                        colors: [Studio.gold, Color(red: 1, green: 0.84, blue: 0.38)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ),
+                                    in: RoundedRectangle(cornerRadius: 14)
+                                )
+                                .shadow(color: Studio.gold.opacity(0.35), radius: 8, y: 3)
+                            }
+                            .disabled(model.working)
+                            .opacity(model.working ? 0.6 : 1.0)
+                            
+                            // Tùy chọn căn chỉnh vị trí Mini-Map (Thu gọn mặc định)
+                            VStack(alignment: .center) {
+                                Button {
+                                    withAnimation(.easeInOut) {
+                                        showCropAdjustment.toggle()
+                                    }
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "slider.horizontal.3")
+                                            .font(.caption2)
+                                        Text(showCropAdjustment ? "Đóng căn chỉnh bản đồ" : "Căn chỉnh vị trí bản đồ (Tùy chọn)")
+                                            .font(.caption2.bold())
+                                    }
+                                    .foregroundStyle(.white.opacity(0.45))
+                                }
+                                .frame(maxWidth: .infinity)
                                 
                                 if showCropAdjustment {
                                     VStack(spacing: 12) {
                                         PhotosPicker(selection: $photo, matching: .images) {
-                                            Label("Tải ảnh chụp màn hình game để nhận diện", systemImage: "photo.badge.plus")
+                                            Label("Tải ảnh chụp màn hình game", systemImage: "photo.badge.plus")
                                                 .font(.caption.bold())
                                                 .frame(maxWidth: .infinity)
                                                 .frame(height: 38)
@@ -359,7 +382,6 @@ struct ContentView: View {
                                             CropEditor(image: image, crop: $model.crop)
                                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                                                 .overlay(RoundedRectangle(cornerRadius: 12).stroke(Studio.aqua.opacity(0.3)))
-                                            Text("Kéo khung xanh nếu muốn dịch chuyển hoặc đổi kích thước vùng phát.").font(.caption2).foregroundStyle(.secondary)
                                         }
                                         
                                         Button("Đặt lại vị trí chuẩn Liên Quân") {
@@ -368,55 +390,22 @@ struct ContentView: View {
                                         .font(.caption2.bold())
                                         .tint(.orange)
                                     }
-                                    .padding(.top, 4)
+                                    .padding(.top, 8)
                                 }
                             }
-                            .padding(14)
-                            .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 12))
-                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Studio.aqua.opacity(0.2), lineWidth: 1))
-                            
-                            // Nút TẠO PHÒNG LỚN (Hero Button)
-                            Button {
-                                Task { await model.createRoom() }
-                            } label: {
-                                HStack(spacing: 10) {
-                                    if model.working {
-                                        ProgressView().tint(.black)
-                                    } else {
-                                        Image(systemName: "plus.circle.fill")
-                                            .font(.title3)
-                                    }
-                                    Text(model.working ? "ĐANG TẠO PHÒNG..." : "TẠO PHÒNG")
-                                        .font(.system(size: 18, weight: .black, design: .rounded))
-                                }
-                                .foregroundStyle(.black)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 56)
-                                .background(
-                                    LinearGradient(
-                                        colors: [Studio.gold, Color(red: 1, green: 0.84, blue: 0.38)],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    ),
-                                    in: RoundedRectangle(cornerRadius: 16)
-                                )
-                                .shadow(color: Studio.gold.opacity(0.4), radius: 10, y: 4)
-                            }
-                            .disabled(model.working)
-                            .opacity(model.working ? 0.6 : 1.0)
                         }
                         .padding(20)
                         .studioCard(accent: Studio.gold)
                         
                     } else if let room = model.room, let url = URL(string: room.viewerURL) {
                         // Card khi đã có phòng phát
-                        VStack(alignment: .leading, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 14) {
                             HStack {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("PHÒNG ĐANG HOẠT ĐỘNG")
-                                        .font(.caption.bold())
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("PHÒNG HOẠT ĐỘNG")
+                                        .font(.caption2.bold())
                                         .foregroundStyle(Studio.aqua)
-                                    Text("Mã: \(room.id)")
+                                    Text(room.id)
                                         .font(.system(size: 20, weight: .bold, design: .monospaced))
                                         .textSelection(.enabled)
                                 }
@@ -425,92 +414,69 @@ struct ContentView: View {
                                     showQR = true
                                 } label: {
                                     Label("QR", systemImage: "qrcode")
-                                        .font(.subheadline.bold())
-                                        .padding(.horizontal, 14)
-                                        .frame(height: 38)
+                                        .font(.caption.bold())
+                                        .padding(.horizontal, 12)
+                                        .frame(height: 34)
                                 }
                                 .buttonStyle(.bordered)
                                 .tint(Studio.aqua)
                             }
                             
                             // Trạng thái phát sóng thời gian thực
-                            HStack(spacing: 10) {
+                            HStack(spacing: 8) {
                                 Circle()
                                     .fill(model.isPublisherLive ? Color.green : Color.orange)
-                                    .frame(width: 10, height: 10)
+                                    .frame(width: 8, height: 8)
                                 Text(model.status)
                                     .font(.subheadline.bold())
                                     .foregroundStyle(model.isPublisherLive ? Color.green : Color.orange)
                                     .lineLimit(1)
-                                    .minimumScaleFactor(0.8)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 14)
-                            .frame(height: 44)
+                            .padding(.horizontal, 12)
+                            .frame(height: 38)
                             .background(
                                 (model.isPublisherLive ? Color.green : Color.orange).opacity(0.12),
-                                in: RoundedRectangle(cornerRadius: 12)
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke((model.isPublisherLive ? Color.green : Color.orange).opacity(0.3), lineWidth: 1)
+                                in: RoundedRectangle(cornerRadius: 10)
                             )
                             
                             // Nút Bật phát ReplayKit trực tiếp
                             BroadcastButtonRow()
-                                .frame(height: 56)
+                                .frame(height: 54)
                                 .shadow(color: Color.blue.opacity(0.3), radius: 6, y: 3)
                             
-                            VStack(alignment: .leading, spacing: 6) {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
-                                    Text("BẮT BUỘC ĐỂ LÊN HÌNH TRÊN MÁY TÍNH:").font(.caption.bold()).foregroundStyle(.yellow)
-                                }
-                                Text("1. Chạm vào nút màu xanh BẬT PHÁT MINI-MAP ở trên.").font(.caption2.bold()).foregroundStyle(.white)
-                                Text("2. Hộp thoại hiện lên: Chọn đúng dòng \"Live - Ma Giáo AOV\" rồi bấm \"Bắt đầu truyền phát\".").font(.caption2.bold()).foregroundStyle(.white)
-                                Text("3. Khi có chấm đỏ ghi màn hình trên góc iPhone và trạng thái chuyển sang XANH LÁ CÂY thì vào game Liên Quân chiến bình thường!").font(.caption2).foregroundStyle(.white.opacity(0.9))
-                            }
-                            .padding(12)
-                            .background(Color.yellow.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
-                            
-                            // Gửi link người xem
-                            ShareLink(item: url) {
-                                Label("Gửi link phòng cho đồng đội", systemImage: "square.and.arrow.up")
+                            // Hàng 2 nút điều khiển cân đối
+                            HStack(spacing: 10) {
+                                ShareLink(item: url) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "square.and.arrow.up")
+                                        Text("CHIA SẺ LINK")
+                                    }
                                     .font(.subheadline.bold())
                                     .frame(maxWidth: .infinity)
-                                    .frame(height: 48)
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .tint(Studio.aqua)
-                            .foregroundStyle(.black)
-                            
-                            // Nút DỪNG PHÁT lớn, nổi bật màu đỏ
-                            Button(role: .destructive) {
-                                Task { await model.closeRoom() }
-                            } label: {
-                                HStack(spacing: 8) {
-                                    Image(systemName: "stop.circle.fill")
-                                        .font(.title3)
-                                    Text(model.working ? "ĐANG DỪNG..." : "DỪNG PHÁT")
-                                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                                    .frame(height: 44)
                                 }
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 50)
-                                .foregroundStyle(.white)
-                                .background(
-                                    LinearGradient(
-                                        colors: [Color(red: 0.9, green: 0.2, blue: 0.25), Color(red: 0.75, green: 0.1, blue: 0.15)],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    ),
-                                    in: RoundedRectangle(cornerRadius: 14)
-                                )
-                                .shadow(color: Color.red.opacity(0.35), radius: 8, y: 3)
+                                .buttonStyle(.borderedProminent)
+                                .tint(Studio.aqua)
+                                .foregroundStyle(.black)
+                                
+                                Button(role: .destructive) {
+                                    Task { await model.closeRoom() }
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "stop.circle.fill")
+                                        Text("DỪNG PHÁT")
+                                    }
+                                    .font(.subheadline.bold())
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 44)
+                                }
+                                .buttonStyle(.bordered)
+                                .tint(.red)
                             }
-                            .disabled(model.working)
-                            .padding(.top, 4)
+                            .padding(.top, 2)
                         }
-                        .padding(20)
+                        .padding(18)
                         .studioCard(accent: Studio.aqua)
                     }
                     
@@ -524,26 +490,6 @@ struct ContentView: View {
                         }
                         .padding(.horizontal, 4)
                     }
-                    
-                    // Cấu hình chuẩn tích hợp
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Cấu hình chuẩn tối ưu sẵn:")
-                            .font(.caption.bold())
-                            .foregroundStyle(.white.opacity(0.7))
-                        Text("• Tỷ lệ mini-map: Chuẩn 1:1 sát mép bản đồ Liên Quân")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                        Text("• Tốc độ: 30 FPS • H.264 WebRTC siêu mượt • Độ trễ < 0.3s")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                        Text("• Tự động đảo hướng phát 180° chuẩn theo màn hình game")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(14)
-                    .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 12))
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.08), lineWidth: 1))
                 }
                 .padding()
             }
@@ -649,22 +595,22 @@ final class BroadcastButtonRowView: UIView {
     }
 
     private func setup() {
-        backgroundColor = UIColor(red: 0.08, green: 0.48, blue: 0.95, alpha: 1.0)
+        backgroundColor = UIColor(red: 0.12, green: 0.28, blue: 0.82, alpha: 1.0)
         layer.cornerRadius = 14
         clipsToBounds = true
 
         iconView.image = UIImage(systemName: "record.circle.fill")
-        iconView.tintColor = .white
+        iconView.tintColor = UIColor(red: 1.0, green: 0.28, blue: 0.35, alpha: 1.0)
         iconView.contentMode = .scaleAspectFit
         iconView.translatesAutoresizingMaskIntoConstraints = false
         iconView.isUserInteractionEnabled = false
 
-        titleLabel.text = "BẬT PHÁT MINI-MAP"
+        titleLabel.text = "BẬT PHÁT RADAR"
         titleLabel.textColor = .white
         titleLabel.font = .systemFont(ofSize: 15, weight: .bold)
         titleLabel.isUserInteractionEnabled = false
 
-        subLabel.text = "Chạm vào đây → chọn Live - Ma Giáo AOV"
+        subLabel.text = "Chạm để kích hoạt phát sóng"
         subLabel.textColor = UIColor.white.withAlphaComponent(0.85)
         subLabel.font = .systemFont(ofSize: 12)
         subLabel.isUserInteractionEnabled = false
