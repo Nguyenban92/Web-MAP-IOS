@@ -71,8 +71,8 @@ final class LivePeer: NSObject, RTCPeerConnectionDelegate {
         if let slot=slot {components.queryItems=[URLQueryItem(name:"slot",value:String(slot))]}
         self.endpoint = components.url!
         self.credential = credential; self.publisher = publisher; self.fps = fps; self.maxBitrate = maxBitrate; self.forceRelay = forceRelay
-        let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = 5; config.timeoutIntervalForResource = 8
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 8; config.timeoutIntervalForResource = 12
         self.session = URLSession(configuration: config)
         super.init()
     }
@@ -88,12 +88,14 @@ final class LivePeer: NSObject, RTCPeerConnectionDelegate {
     }
     private func report(_ text: String) { onStatus?(text) }
     private func remoteLog(_ text: String) {
+        NSLog("[LivePeer] %@", text)
         guard let host = endpoint.host, let url = URL(string: "https://\(host)/api/broadcast/log") else { return }
         var r = URLRequest(url: url)
         r.httpMethod = "POST"
+        r.timeoutInterval = 8
         r.setValue("application/json", forHTTPHeaderField: "Content-Type")
         r.httpBody = try? JSONSerialization.data(withJSONObject: ["source": "PEER_\(publisher ? "PUB" : "VIEW")_\(endpoint.query ?? "")", "msg": text])
-        session.dataTask(with: r).resume()
+        session.dataTask(with: r) { _, _, _ in }.resume()
     }
     private func request(_ payload: [String: Any]?, completion: @escaping (Int, Data?) -> Void) {
         var r = URLRequest(url: endpoint); r.setValue("Bearer \(credential)", forHTTPHeaderField: "Authorization")
@@ -163,6 +165,8 @@ final class LivePeer: NSObject, RTCPeerConnectionDelegate {
             epoch=state.epoch;remoteReady=false;negotiating=false;candidateIndex=0;operations=[]
             stateStarted=Date()
             if state.viewer { buildPeer(state.iceServers) }
+        } else if state.viewer && pc == nil {
+            buildPeer(state.iceServers)
         }
         guard state.viewer else { report("Đã ghép nối • Chờ người xem mở link");return }
         guard let pc=pc else {return}
