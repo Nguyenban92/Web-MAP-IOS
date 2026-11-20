@@ -3,7 +3,7 @@ import CoreImage
 import ImageIO
 import WebRTC
 
-public class SampleHandler: RPBroadcastSampleHandler {
+class SampleHandler: RPBroadcastSampleHandler {
     private lazy var context = CIContext(options: [.cacheIntermediates: false])
     private let lock = NSLock()
     private var active = false
@@ -68,25 +68,36 @@ public class SampleHandler: RPBroadcastSampleHandler {
         self.syncTimer = t
         t.resume()
     }
+
+    private func isActive() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return active
+    }
+
+    private func updatePairingBusy(_ busy: Bool) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if busy {
+            guard !pairingBusy, self.config == nil, self.active else { return false }
+            pairingBusy = true
+            return true
+        } else {
+            pairingBusy = false
+            return true
+        }
+    }
     
     private func tryAutoPair() {
-        lock.lock()
-        let isRunning = self.active
-        let currentConfig = self.config
-        let isBusy = self.pairingBusy
-        lock.unlock()
-        guard isRunning, currentConfig == nil, !isBusy else { return }
+        guard !pairingBusy, config == nil, isActive() else { return }
         requestServerAutoPair()
     }
 
     private func requestServerAutoPair() {
-        lock.lock()
-        guard !pairingBusy, self.config == nil, self.active else { lock.unlock(); return }
-        pairingBusy = true
-        lock.unlock()
+        guard updatePairingBusy(true) else { return }
 
         guard let url = URL(string: "\(serverURL)/api/broadcast/auto-pair") else {
-            lock.lock(); pairingBusy = false; lock.unlock(); return
+            _ = updatePairingBusy(false)
+            return
         }
 
         remoteLog("requestServerAutoPair() fetching active room from server...")
@@ -102,21 +113,15 @@ public class SampleHandler: RPBroadcastSampleHandler {
                 let (data, response) = try await URLSession.shared.data(for: req)
                 let code = (response as? HTTPURLResponse)?.statusCode ?? 0
                 self.remoteLog("requestServerAutoPair() response HTTP \(code)")
+                _ = self.updatePairingBusy(false)
                 
-                self.lock.lock()
-                self.pairingBusy = false
-                let isActive = self.active
-                self.lock.unlock()
-                
-                guard isActive, code == 200 else { return }
+                guard code == 200 else { return }
                 if let c = try? JSONDecoder().decode(BroadcastConfig.self, from: data), c.enabled, c.crop.valid {
                     self.remoteLog("requestServerAutoPair() auto-paired with room: \(c.room.id)")
                     self.startWithConfig(c)
                 }
             } catch {
-                self.lock.lock()
-                self.pairingBusy = false
-                self.lock.unlock()
+                _ = self.updatePairingBusy(false)
                 self.remoteLog("requestServerAutoPair() error: \(error.localizedDescription)")
             }
         }
@@ -125,9 +130,7 @@ public class SampleHandler: RPBroadcastSampleHandler {
     private func checkServerAutoPair(currentRoomID: String?) {
         guard let url = URL(string: "\(serverURL)/api/broadcast/auto-pair") else { return }
         Task.detached(priority: .userInitiated) { [weak self] in
-            guard let self = self else { return }
-            self.lock.lock(); let isRunning = self.active; self.lock.unlock()
-            guard isRunning else { return }
+            guard let self = self, self.isActive() else { return }
 
             var req = URLRequest(url: url)
             req.httpMethod = "POST"
