@@ -147,11 +147,25 @@ final class AppModel: ObservableObject {
             if crop.rotate180 == nil { crop.rotate180 = true }
             if crop.version == nil { crop.version = 3 }
 
+            let bodyDict: [String: Any] = [
+                "password": password,
+                "crop": [
+                    "x": crop.x,
+                    "y": crop.y,
+                    "width": crop.width,
+                    "height": crop.height,
+                    "referenceAspect": crop.referenceAspect,
+                    "rotate180": crop.rotate180 ?? true,
+                    "version": crop.version ?? 3
+                ],
+                "fps": fps,
+                "quality": quality
+            ]
             var request = URLRequest(url: url.appendingPathComponent("api/rooms"))
             request.httpMethod = "POST"
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.setValue("Bearer \(trimmedKey)", forHTTPHeaderField: "Authorization")
-            request.httpBody = try JSONSerialization.data(withJSONObject: ["password": password])
+            request.httpBody = try JSONSerialization.data(withJSONObject: bodyDict)
             request.timeoutInterval = 15
             let (data, response) = try await URLSession.shared.data(for: request)
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
@@ -161,9 +175,12 @@ final class AppModel: ObservableObject {
                 }
                 throw failure("Không tạo được phòng (mã lỗi \(statusCode)). Vui lòng kiểm tra lại Key.")
             }
-            room = try JSONDecoder().decode(Room.self, from: data)
+            let createdRoom = try JSONDecoder().decode(Room.self, from: data)
+            room = createdRoom
             try save()
-            message = "Phòng đã sẵn sàng! Bấm 'Bắt đầu phát' để lấy mã ghép nối."
+            let config = BroadcastConfig(server: server, room: createdRoom, crop: crop, fps: fps, quality: quality, enabled: true)
+            try? SharedStore.save(config)
+            message = "Phòng đã sẵn sàng! Bật Broadcast để vào game phát ngay."
         } catch { message = error.localizedDescription }
     }
 
@@ -401,28 +418,33 @@ struct ContentView: View {
                                     Label("Gửi link", systemImage: "square.and.arrow.up")
                                         .font(.subheadline.bold())
                                         .frame(maxWidth: .infinity)
-                                        .frame(height: 48)
+                                        .frame(height: 50)
                                 }
                                 .buttonStyle(.borderedProminent)
                                 .tint(Studio.aqua)
                                 .foregroundStyle(.black)
                                 
-                                Button {
-                                    Task { await model.preparePairing() }
-                                } label: {
-                                    Label("Bắt đầu phát", systemImage: "antenna.radiowaves.left.and.right")
+                                HStack(spacing: 6) {
+                                    BroadcastButton().frame(width: 44, height: 44)
+                                    Text("BẬT PHÁT")
                                         .font(.subheadline.bold())
-                                        .frame(maxWidth: .infinity)
-                                        .frame(height: 48)
+                                        .foregroundStyle(.white)
                                 }
-                                .buttonStyle(.borderedProminent)
-                                .tint(Color(red: 0.1, green: 0.5, blue: 0.95))
-                                .disabled(model.working)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 50)
+                                .background(Color(red: 0.1, green: 0.5, blue: 0.95), in: RoundedRectangle(cornerRadius: 12))
                             }
                             
-                            if !model.pairing.isEmpty {
-                                PairingPanel(value: model.pairing, status: model.status)
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                                    Text("Tự động kết nối - Không cần quét mã QR").font(.caption.bold()).foregroundStyle(.white)
+                                }
+                                Text("1. Bấm nút BẬT PHÁT ở trên (hoặc kéo Control Center chọn Live - Ma Giáo AOV).").font(.caption2).foregroundStyle(.secondary)
+                                Text("2. Mở game Liên Quân chơi bình thường. Bản đồ mini sẽ tự động truyền đến link người xem.").font(.caption2).foregroundStyle(.secondary)
                             }
+                            .padding(12)
+                            .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
                             
                             // Trạng thái người xem
                             HStack(spacing: 10) {

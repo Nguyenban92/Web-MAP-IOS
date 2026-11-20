@@ -16,23 +16,71 @@ final class SampleHandler: RPBroadcastSampleHandler {
     private var poolWidth = 0
     private var poolHeight = 0
     private var session: URLSession = {
-        let c=URLSessionConfiguration.ephemeral;c.timeoutIntervalForRequest=5;c.timeoutIntervalForResource=8
-        return URLSession(configuration:c)
+        let c = URLSessionConfiguration.ephemeral
+        c.timeoutIntervalForRequest = 5
+        c.timeoutIntervalForResource = 8
+        return URLSession(configuration: c)
     }()
     private var startedAt = 0.0
     private var lastScan = 0.0
     private var pairingBusy = false
+    
+    private let serverURL = "https://magiao-live-map-aov.onrender.com"
+    private let adminKey = "MG-FvEw0o7qt-STgTZOUbWvbNpS"
+
     override func broadcastStarted(withSetupInfo setupInfo: [String: NSObject]?) {
         startedAt = ProcessInfo.processInfo.systemUptime
         lock.lock(); active = true; lock.unlock()
+        tryAutoPair()
     }
-    private func scanPairing(_ sampleBuffer: CMSampleBuffer) {
-        let now = ProcessInfo.processInfo.systemUptime
-        guard now - startedAt < 90 else {
-            finishBroadcastWithError(NSError(domain: "NBWebMap", code: 4, userInfo: [NSLocalizedDescriptionKey: "Hết thời gian ghép nối. Mở app, tạo mã khởi động mới và phát lại."]))
+    
+    private func tryAutoPair() {
+        if let c = SharedStore.read(), c.enabled, c.crop.valid {
+            startWithConfig(c)
             return
         }
-        lock.lock(); let shouldScan = !pairingBusy && now - lastScan > 0.8; lock.unlock()
+        requestServerAutoPair()
+    }
+
+    private func startWithConfig(_ c: BroadcastConfig) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard self.active, self.config == nil else { return }
+        self.config = c
+        let bitrate = Int(350000 + c.quality * 850000)
+        self.peers = (0..<4).map {
+            LivePeer(server: c.server, roomID: c.room.id, credential: c.room.publishToken, publisher: true, slot: $0, fps: Int(c.fps), maxBitrate: bitrate)
+        }
+        self.peers.forEach { $0.start() }
+    }
+
+    private func requestServerAutoPair() {
+        lock.lock()
+        guard !pairingBusy, self.config == nil, self.active else { lock.unlock(); return }
+        pairingBusy = true
+        lock.unlock()
+
+        guard let url = URL(string: "\(serverURL)/api/broadcast/auto-pair") else {
+            lock.lock(); pairingBusy = false; lock.unlock(); return
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.timeoutInterval = 7
+        req.setValue("Bearer \(adminKey)", forHTTPHeaderField: "Authorization")
+        session.dataTask(with: req) { [weak self] data, response, _ in
+            guard let self = self else { return }
+            self.lock.lock(); self.pairingBusy = false; self.lock.unlock()
+            guard self.active, (response as? HTTPURLResponse)?.statusCode == 200, let data = data,
+                  let c = try? JSONDecoder().decode(BroadcastConfig.self, from: data), c.enabled, c.crop.valid else {
+                return
+            }
+            self.startWithConfig(c)
+        }.resume()
+    }
+
+    private func scanPairing(_ sampleBuffer: CMSampleBuffer) {
+        let now = ProcessInfo.processInfo.systemUptime
+        lock.lock(); let shouldScan = !pairingBusy && now - lastScan > 1.2; lock.unlock()
         guard shouldScan, let pixel = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         lastScan = now
         let request = VNDetectBarcodesRequest(); request.symbologies = [.qr]
@@ -40,7 +88,10 @@ final class SampleHandler: RPBroadcastSampleHandler {
         guard let payload = request.results?.compactMap({ $0.payloadStringValue }).first(where: { $0.hasPrefix("NBWM2:https://") }),
               let url = URL(string: String(payload.dropFirst(6))), url.scheme == "https", url.host != nil,
               url.user == nil, url.password == nil, url.query == nil, url.path == "/" || url.path.isEmpty,
-              let fragment = url.fragment, fragment.hasPrefix("pair.") else { return }
+              let fragment = url.fragment, fragment.hasPrefix("pair.") else {
+            requestServerAutoPair()
+            return
+        }
         let key = String(fragment.dropFirst(5))
         guard key.count == 32 else { return }
         var components = URLComponents(url: url, resolvingAgainstBaseURL: false)!
@@ -52,37 +103,48 @@ final class SampleHandler: RPBroadcastSampleHandler {
             guard let self = self else { return }
             self.lock.lock(); defer { self.lock.unlock() }; self.pairingBusy = false
             guard self.active, (response as? HTTPURLResponse)?.statusCode == 200, let data = data,
-                  let c = try? JSONDecoder().decode(BroadcastConfig.self, from: data), c.enabled, c.crop.valid,
-                  let server = URL(string: c.server), server.scheme == "https", server.host == url.host, server.port == url.port else { return }
-            self.config = c
-            let bitrate=Int(350000+c.quality*850000)
-            self.peers=(0..<4).map{LivePeer(server:c.server,roomID:c.room.id,credential:c.room.publishToken,publisher:true,slot:$0,fps:Int(c.fps),maxBitrate:bitrate)}
-            self.peers.forEach{$0.start()}
+                  let c = try? JSONDecoder().decode(BroadcastConfig.self, from: data), c.enabled, c.crop.valid else { return }
+            self.startWithConfig(c)
         }.resume()
     }
 
-    override func processSampleBuffer(_ sampleBuffer:CMSampleBuffer,with sampleBufferType:RPSampleBufferType) {
-        guard sampleBufferType == .video else{return}
-        lock.lock();let c=config;let peers=self.peers;let running=active;lock.unlock()
-        guard running else{return}
-        guard let c=c, !peers.isEmpty else{scanPairing(sampleBuffer);return}
-        let now=ProcessInfo.processInfo.systemUptime
-        let thermal=ProcessInfo.processInfo.thermalState
-        let targetFPS = thermal == .serious || thermal == .critical ? min(15,c.fps):c.fps
-        guard now-lastFrame >= 0.9/max(1,min(60,targetFPS)) else{return}
-        lastFrame=now
+    override func processSampleBuffer(_ sampleBuffer: CMSampleBuffer, with sampleBufferType: RPSampleBufferType) {
+        guard sampleBufferType == .video else { return }
+        lock.lock(); let c = config; let peers = self.peers; let running = active; lock.unlock()
+        guard running else { return }
+        guard let c = c, !peers.isEmpty else {
+            let now = ProcessInfo.processInfo.systemUptime
+            if now - lastScan > 1.5 {
+                lastScan = now
+                if let saved = SharedStore.read(), saved.enabled, saved.crop.valid {
+                    startWithConfig(saved)
+                } else {
+                    requestServerAutoPair()
+                    scanPairing(sampleBuffer)
+                }
+            }
+            return
+        }
+        let now = ProcessInfo.processInfo.systemUptime
+        let thermal = ProcessInfo.processInfo.thermalState
+        let targetFPS = thermal == .serious || thermal == .critical ? min(15, c.fps) : c.fps
+        guard now - lastFrame >= 0.9 / max(1, min(60, targetFPS)) else { return }
+        lastFrame = now
         autoreleasepool {
-            guard let raw=CMSampleBufferGetImageBuffer(sampleBuffer) else{return}
-            let rawFrame=CIImage(cvPixelBuffer:raw);var frame=rawFrame
-            if let a=CMGetAttachment(sampleBuffer,key:RPVideoSampleOrientationKey as CFString,attachmentModeOut:nil) as? NSNumber,
-               let o=CGImagePropertyOrientation(rawValue:a.uint32Value){let oriented=rawFrame.oriented(o);let ra=rawFrame.extent.width/rawFrame.extent.height,oa=oriented.extent.width/oriented.extent.height;if abs(oa-c.crop.referenceAspect)<abs(ra-c.crop.referenceAspect){frame=oriented}}
-            // Correct the 180-degree landscape mismatch seen when the game and
-            // the reference screenshot use opposite physical phone directions.
+            guard let raw = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+            let rawFrame = CIImage(cvPixelBuffer: raw); var frame = rawFrame
+            if let a = CMGetAttachment(sampleBuffer, key: RPVideoSampleOrientationKey as CFString, attachmentModeOut: nil) as? NSNumber,
+               let o = CGImagePropertyOrientation(rawValue: a.uint32Value) {
+                let oriented = rawFrame.oriented(o)
+                let ra = rawFrame.extent.width / rawFrame.extent.height
+                let oa = oriented.extent.width / oriented.extent.height
+                if abs(oa - c.crop.referenceAspect) < abs(ra - c.crop.referenceAspect) { frame = oriented }
+            }
             if c.crop.rotate180 ?? true { frame = frame.oriented(.down) }
-            let e=frame.extent
-            // When the device leaves the selected aspect ratio, replace the remote image with black.
-            guard abs(e.width/e.height-c.crop.referenceAspect)/c.crop.referenceAspect<0.04 else {
-                if now-lastBlack>1 {lastBlack=now;peers.forEach{sendBlack($0,now:now)}};return
+            let e = frame.extent
+            guard abs(e.width / e.height - c.crop.referenceAspect) / c.crop.referenceAspect < 0.04 else {
+                if now - lastBlack > 1 { lastBlack = now; peers.forEach { sendBlack($0, now: now) } }
+                return
             }
             let rawW = e.width * c.crop.width
             let rawH = e.height * c.crop.height
@@ -105,27 +167,44 @@ final class SampleHandler: RPBroadcastSampleHandler {
             peers.forEach { $0.push(output, timeNs: Int64(now * 1_000_000_000)) }
         }
     }
-    private func pixel(width:Int,height:Int)->CVPixelBuffer? {
-        if pool==nil || width != poolWidth || height != poolHeight {
-            pool=nil;poolWidth=width;poolHeight=height
-            let attributes:[String:Any]=[kCVPixelBufferPixelFormatTypeKey as String:kCVPixelFormatType_32BGRA,kCVPixelBufferWidthKey as String:width,kCVPixelBufferHeightKey as String:height,kCVPixelBufferIOSurfacePropertiesKey as String:[:],kCVPixelBufferMetalCompatibilityKey as String:true]
-            CVPixelBufferPoolCreate(kCFAllocatorDefault,nil,attributes as CFDictionary,&pool)
+
+    private func pixel(width: Int, height: Int) -> CVPixelBuffer? {
+        if pool == nil || width != poolWidth || height != poolHeight {
+            pool = nil; poolWidth = width; poolHeight = height
+            let attributes: [String: Any] = [
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+                kCVPixelBufferWidthKey as String: width,
+                kCVPixelBufferHeightKey as String: height,
+                kCVPixelBufferIOSurfacePropertiesKey as String: [:],
+                kCVPixelBufferMetalCompatibilityKey as String: true
+            ]
+            CVPixelBufferPoolCreate(kCFAllocatorDefault, nil, attributes as CFDictionary, &pool)
         }
-        guard let pool=pool else{return nil}
-        var buffer:CVPixelBuffer?
-        let aux=[kCVPixelBufferPoolAllocationThresholdKey as String:4] as CFDictionary
-        guard CVPixelBufferPoolCreatePixelBufferWithAuxAttributes(kCFAllocatorDefault,pool,aux,&buffer)==kCVReturnSuccess else{return nil}
+        guard let pool = pool else { return nil }
+        var buffer: CVPixelBuffer?
+        let aux = [kCVPixelBufferPoolAllocationThresholdKey as String: 4] as CFDictionary
+        guard CVPixelBufferPoolCreatePixelBufferWithAuxAttributes(kCFAllocatorDefault, pool, aux, &buffer) == kCVReturnSuccess else { return nil }
         return buffer
     }
-    private func sendBlack(_ peer:LivePeer,now:Double) {
-        guard let output=pixel(width:max(2,poolWidth),height:max(2,poolHeight)) else{return}
-        context.render(CIImage(color:.black).cropped(to:CGRect(x:0,y:0,width:CVPixelBufferGetWidth(output),height:CVPixelBufferGetHeight(output))),to:output)
-        peer.push(output,timeNs:Int64(now*1_000_000_000))
+
+    private func sendBlack(_ peer: LivePeer, now: Double) {
+        guard let output = pixel(width: max(2, poolWidth), height: max(2, poolHeight)) else { return }
+        context.render(CIImage(color: .black).cropped(to: CGRect(x: 0, y: 0, width: CVPixelBufferGetWidth(output), height: CVPixelBufferGetHeight(output))), to: output)
+        peer.push(output, timeNs: Int64(now * 1_000_000_000))
     }
-    override func broadcastPaused() {lock.lock();let p=peers;lock.unlock();p.forEach{sendBlack($0,now:ProcessInfo.processInfo.systemUptime)}}
+
+    override func broadcastPaused() {
+        lock.lock(); let p = peers; lock.unlock()
+        p.forEach { sendBlack($0, now: ProcessInfo.processInfo.systemUptime) }
+    }
+
     override func broadcastResumed() {}
+
     override func broadcastFinished() {
-        lock.lock();active=false;let p=peers;peers=[];config=nil;lock.unlock()
-        p.forEach{$0.stop()};session.invalidateAndCancel();pool=nil;context.clearCaches()
+        lock.lock(); active = false; let p = peers; peers = []; config = nil; lock.unlock()
+        p.forEach { $0.stop() }
+        session.invalidateAndCancel()
+        pool = nil
+        context.clearCaches()
     }
 }

@@ -22,4 +22,12 @@ test('pairing requires publisher, validates crop, expires, single-use and revoke
  clock+=90001;assert.equal((await call('/api/pair','POST',fresh)).status,404);
  const closing=await make();assert.equal((await call(path,'DELETE',room.publishToken)).status,204);
  assert.equal((await call('/api/pair','POST',closing)).status,404);
+
+ const autoPairRes = await call('/api/broadcast/auto-pair', 'POST', 'a'.repeat(32), {});
+ assert.equal(autoPairRes.status, 200);
+ const autoConfig = await autoPairRes.json();
+ assert.ok(autoConfig.room.id);
+ assert.ok(autoConfig.room.publishToken);
+ assert.equal(autoConfig.server, 'https://map.example.com');
+ assert.equal(autoConfig.enabled, true);
 });

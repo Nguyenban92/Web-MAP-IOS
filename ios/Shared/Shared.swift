@@ -30,14 +30,20 @@ struct BroadcastConfig: Codable {
     var quality: Double
     var enabled: Bool
 }
-// App-private storage only. Broadcast receives configuration through one-time HTTPS pairing.
 enum SharedStore {
-    static var directory: URL? { FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first }
+    static let appGroupID = "group.vn.nguyenban.nbwebmap"
+    static var directory: URL? {
+        if let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID) {
+            return container
+        }
+        return FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+    }
     static func save(_ config: BroadcastConfig) throws {
-        try JSONEncoder().encode(config).write(to: directory!.appendingPathComponent("config.json"), options: [.atomic, .completeFileProtection])
+        guard let dir = directory else { return }
+        try JSONEncoder().encode(config).write(to: dir.appendingPathComponent("config.json"), options: [.atomic, .completeFileProtection])
     }
     static func read() -> BroadcastConfig? {
-        guard let data = try? Data(contentsOf: directory!.appendingPathComponent("config.json")) else { return nil }
+        guard let dir = directory, let data = try? Data(contentsOf: dir.appendingPathComponent("config.json")) else { return nil }
         return try? JSONDecoder().decode(BroadcastConfig.self, from: data)
     }
     static func status(_ value: String) {}

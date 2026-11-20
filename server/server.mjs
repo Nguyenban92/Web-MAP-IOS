@@ -124,8 +124,67 @@ export function createApp({ adminKey, publisherKeys = '', publicURL, now = Date.
         const hash = input.password ? await derive(input.password, salt, 32) : null;
         const id = randomBytes(6).toString('hex').toUpperCase();
         const publishToken = token(), viewToken = token();
-        rooms.set(id, { owner: publisher.id, publishToken, viewToken, salt, hash, created: now(), lastFrame: 0, frame: null, seq: 0, grants: new Set() });
+        const defaultCrop = { x: 0.055, y: 0.002, width: 0.144, height: 0.311, referenceAspect: 2.165, rotate180: true, version: 3 };
+        const crop = input?.crop || defaultCrop;
+        const fps = Number.isFinite(input?.fps) ? input.fps : 30;
+        const quality = Number.isFinite(input?.quality) ? input.quality : 0.7;
+        rooms.set(id, { owner: publisher.id, publishToken, viewToken, salt, hash, created: now(), lastFrame: 0, frame: null, seq: 0, grants: new Set(), crop, fps, quality, paired: true });
         send(201, { id, publishToken, viewerURL: `${base.origin}/#${id}.${viewToken}` }); return;
+      }
+      if (path === '/api/broadcast/auto-pair' && req.method === 'POST') {
+        limited('autopair:' + req.socket.remoteAddress, 60, 60000);
+        const publisher = await publisherFor(bearer(req));
+        if (!publisher) throw fail(401, 'Unauthorized');
+        cleanup();
+        let activeRoom = null, activeId = null;
+        for (const [id, r] of rooms) {
+          if (r.owner === publisher.id && !expired(r)) {
+            if (!activeRoom || r.created > activeRoom.created) {
+              activeRoom = r;
+              activeId = id;
+            }
+          }
+        }
+        const defaultCrop = { x: 0.055, y: 0.002, width: 0.144, height: 0.311, referenceAspect: 2.165, rotate180: true, version: 3 };
+        if (!activeRoom) {
+          const salt = randomBytes(16);
+          const id = randomBytes(6).toString('hex').toUpperCase();
+          const publishToken = token(), viewToken = token();
+          activeRoom = {
+            owner: publisher.id,
+            publishToken,
+            viewToken,
+            salt,
+            hash: null,
+            created: now(),
+            lastFrame: 0,
+            frame: null,
+            seq: 0,
+            grants: new Set(),
+            crop: defaultCrop,
+            fps: 30,
+            quality: 0.7,
+            paired: true
+          };
+          rooms.set(id, activeRoom);
+          activeId = id;
+        } else {
+          activeRoom.paired = true;
+        }
+        const config = {
+          server: base.origin,
+          room: {
+            id: activeId,
+            publishToken: activeRoom.publishToken,
+            viewerURL: `${base.origin}/#${activeId}.${activeRoom.viewToken}`
+          },
+          crop: activeRoom.crop || defaultCrop,
+          fps: activeRoom.fps || 30,
+          quality: activeRoom.quality || 0.7,
+          enabled: true
+        };
+        send(200, config);
+        return;
       }
       if (path === '/api/pair' && req.method === 'POST') {
         limited('pair:' + req.socket.remoteAddress, 60, 60000);
