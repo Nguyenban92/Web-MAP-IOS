@@ -79,6 +79,7 @@ final class LivePeer: NSObject, RTCPeerConnectionDelegate {
     func start() {
         queue.async {
             guard self.timer == nil, !self.stopped else { return }
+            self.remoteLog("LivePeer start() slot: \(self.endpoint.query ?? "0")")
             self.initialOperation = self.publisher ? "reset" : "join"
             let t = DispatchSource.makeTimerSource(queue: self.queue)
             t.schedule(deadline: .now(), repeating: .seconds(1))
@@ -86,6 +87,14 @@ final class LivePeer: NSObject, RTCPeerConnectionDelegate {
         }
     }
     private func report(_ text: String) { onStatus?(text) }
+    private func remoteLog(_ text: String) {
+        guard let host = endpoint.host, let url = URL(string: "https://\(host)/api/broadcast/log") else { return }
+        var r = URLRequest(url: url)
+        r.httpMethod = "POST"
+        r.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        r.httpBody = try? JSONSerialization.data(withJSONObject: ["source": "PEER_\(publisher ? "PUB" : "VIEW")_\(endpoint.query ?? "")", "msg": text])
+        session.dataTask(with: r).resume()
+    }
     private func request(_ payload: [String: Any]?, completion: @escaping (Int, Data?) -> Void) {
         var r = URLRequest(url: endpoint); r.setValue("Bearer \(credential)", forHTTPHeaderField: "Authorization")
         if let payload = payload { r.httpMethod = "POST"; r.httpBody = try? JSONSerialization.data(withJSONObject: payload); r.setValue("application/json", forHTTPHeaderField: "Content-Type") }
@@ -111,6 +120,7 @@ final class LivePeer: NSObject, RTCPeerConnectionDelegate {
                 else { self.report("Đang nối lại máy chủ…") }; return
             }
             self.initialOperation = nil; self.signalSuccess = Date(); self.relayAvailable = state.relayAvailable
+            self.remoteLog("tick HTTP \(code), epoch: \(state.epoch), viewer: \(state.viewer), offer: \(state.offer != nil), answer: \(state.answer != nil)")
             self.apply(state)
             if Date().timeIntervalSince(self.lastStats)>2 { self.lastStats=Date(); self.readStats() }
             if self.publisher, state.viewer, let peer = self.pc {
@@ -157,9 +167,22 @@ final class LivePeer: NSObject, RTCPeerConnectionDelegate {
         guard state.viewer else { report("Đã ghép nối • Chờ người xem mở link");return }
         guard let pc=pc else {return}
         if publisher {
-            if pc.localDescription == nil && !negotiating { makeLocalDescription(offer:true,peer:pc) }
-            if let answer=state.answer, !remoteReady, !negotiating { setRemote(answer,type:.answer,peer:pc) }
-        } else if let offer=state.offer, !remoteReady, !negotiating { setRemote(offer,type:.offer,peer:pc) }
+            if state.offer == nil && !negotiating {
+                if let sdp = pc.localDescription?.sdp {
+                    remoteLog("Resending local offer to server (epoch \(self.epoch))...")
+                    self.send(["op": "offer", "epoch": self.epoch, "sdp": sdp])
+                } else {
+                    remoteLog("Generating new local offer (epoch \(self.epoch))...")
+                    makeLocalDescription(offer: true, peer: pc)
+                }
+            }
+            if let answer = state.answer, !remoteReady, !negotiating {
+                remoteLog("Received answer from viewer! Setting remote description...")
+                setRemote(answer, type: .answer, peer: pc)
+            }
+        } else if let offer = state.offer, !remoteReady, !negotiating {
+            setRemote(offer, type: .offer, peer: pc)
+        }
         if remoteReady {
             while candidateIndex<state.candidates.count {
                 let c=state.candidates[candidateIndex];candidateIndex+=1

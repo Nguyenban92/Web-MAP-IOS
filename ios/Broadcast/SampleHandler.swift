@@ -26,10 +26,21 @@ final class SampleHandler: RPBroadcastSampleHandler {
     
     private let serverURL = "https://magiao-live-map-aov.onrender.com"
     private let adminKey = "MG-FvEw0o7qt-STgTZOUbWvbNpS"
+    private var hasLoggedFirstFrame = false
+
+    private func remoteLog(_ text: String) {
+        guard let url = URL(string: "\(serverURL)/api/broadcast/log") else { return }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["source": "EXTENSION", "msg": text])
+        session.dataTask(with: req).resume()
+    }
 
     override func broadcastStarted(withSetupInfo setupInfo: [String: NSObject]?) {
         startedAt = ProcessInfo.processInfo.systemUptime
         lock.lock(); active = true; lock.unlock()
+        remoteLog("broadcastStarted() launched!")
         tryAutoPair()
         startSyncTimer()
     }
@@ -63,9 +74,11 @@ final class SampleHandler: RPBroadcastSampleHandler {
     
     private func tryAutoPair() {
         if let c = SharedStore.read(), c.enabled, c.crop.valid {
+            remoteLog("tryAutoPair() using SharedStore room: \(c.room.id)")
             startWithConfig(c)
             return
         }
+        remoteLog("tryAutoPair() requesting server auto-pair...")
         requestServerAutoPair()
     }
 
@@ -74,6 +87,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
         defer { lock.unlock() }
         guard self.active, self.config == nil else { return }
         self.config = c
+        remoteLog("startWithConfig() starting 4 peers for room: \(c.room.id)")
         let bitrate = Int(350000 + c.quality * 850000)
         self.peers = (0..<4).map { slot in
             let peer = LivePeer(server: c.server, roomID: c.room.id, credential: c.room.publishToken, publisher: true, slot: slot, fps: Int(c.fps), maxBitrate: bitrate)
@@ -122,10 +136,12 @@ final class SampleHandler: RPBroadcastSampleHandler {
         req.httpMethod = "POST"
         req.timeoutInterval = 7
         req.setValue("Bearer \(adminKey)", forHTTPHeaderField: "Authorization")
-        session.dataTask(with: req) { [weak self] data, response, _ in
+        session.dataTask(with: req) { [weak self] data, response, error in
             guard let self = self else { return }
             self.lock.lock(); self.pairingBusy = false; self.lock.unlock()
-            guard self.active, (response as? HTTPURLResponse)?.statusCode == 200, let data = data,
+            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+            self.remoteLog("requestServerAutoPair() HTTP \(code), err: \(error?.localizedDescription ?? "none")")
+            guard self.active, code == 200, let data = data,
                   let c = try? JSONDecoder().decode(BroadcastConfig.self, from: data), c.enabled, c.crop.valid else {
                 return
             }
@@ -195,6 +211,10 @@ final class SampleHandler: RPBroadcastSampleHandler {
                 .transformed(by: CGAffineTransform(translationX: -r.minX, y: -r.minY))
                 .transformed(by: CGAffineTransform(scaleX: Double(w) / actualSide, y: Double(h) / actualSide))
             context.render(cropped, to: output)
+            if !hasLoggedFirstFrame {
+                hasLoggedFirstFrame = true
+                remoteLog("processSampleBuffer() 1st frame rendered and pushed! size: \(w)x\(h)")
+            }
             peers.forEach { $0.push(output, timeNs: Int64(now * 1_000_000_000)) }
         }
     }
@@ -232,6 +252,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
     override func broadcastResumed() {}
 
     override func broadcastFinished() {
+        remoteLog("broadcastFinished() called")
         syncTimer?.cancel(); syncTimer = nil
         lock.lock(); active = false; let p = peers; peers = []; config = nil; lock.unlock()
         p.forEach { $0.stop() }

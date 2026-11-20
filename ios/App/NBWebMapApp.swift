@@ -135,6 +135,16 @@ final class AppModel: ObservableObject {
 
     func failure(_ text: String) -> NSError { NSError(domain: "NBWebMap", code: 1, userInfo: [NSLocalizedDescriptionKey: text]) }
 
+    private func remoteLog(_ text: String) {
+        let base = server.isEmpty ? "https://magiao-live-map-aov.onrender.com" : server
+        guard let url = URL(string: "\(base)/api/broadcast/log") else { return }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["source": "APP", "msg": text])
+        URLSession.shared.dataTask(with: req).resume()
+    }
+
     func createRoom() async {
         working = true; defer { working = false }
         do {
@@ -186,6 +196,7 @@ final class AppModel: ObservableObject {
             }
             let createdRoom = try JSONDecoder().decode(Room.self, from: data)
             room = createdRoom
+            remoteLog("App created room \(createdRoom.id), URL: \(createdRoom.viewerURL)")
             try save()
             let config = BroadcastConfig(server: server, room: createdRoom, crop: crop, fps: fps, quality: quality, enabled: true)
             try? SharedStore.save(config)
@@ -452,14 +463,15 @@ struct ContentView: View {
                             
                             VStack(alignment: .leading, spacing: 6) {
                                 HStack(spacing: 6) {
-                                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                                    Text("Tự động kết nối - Không cần quét mã QR").font(.caption.bold()).foregroundStyle(.white)
+                                    Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.yellow)
+                                    Text("LƯU Ý QUAN TRỌNG KHI BẬT PHÁT:").font(.caption.bold()).foregroundStyle(.yellow)
                                 }
-                                Text("1. Bấm nút BẬT PHÁT ở trên (hoặc kéo Control Center chọn Live - Ma Giáo AOV).").font(.caption2).foregroundStyle(.secondary)
-                                Text("2. Mở game Liên Quân chơi bình thường. Bản đồ mini sẽ tự động truyền đến link người xem.").font(.caption2).foregroundStyle(.secondary)
+                                Text("1. Bấm nút BẬT PHÁT ở trên.").font(.caption2.bold()).foregroundStyle(.white)
+                                Text("2. Trong hộp thoại hiện lên, CHỌN ĐÚNG dòng 'Live - Ma Giáo AOV' (không chọn 'Cuộn camera') rồi bấm 'Bắt đầu truyền phát'.").font(.caption2.bold()).foregroundStyle(.white)
+                                Text("3. Mở game Liên Quân chơi bình thường, mini-map tự động truyền đến người xem.").font(.caption2).foregroundStyle(.secondary)
                             }
                             .padding(12)
-                            .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
+                            .background(Color.yellow.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
                             
                             // Trạng thái người xem
                             HStack(spacing: 10) {
@@ -624,25 +636,44 @@ struct CropEditor: View {
     }
 }
 
-struct BroadcastButton: UIViewRepresentable {
-    func makeUIView(context: Context) -> RPSystemBroadcastPickerView {
-        let view = RPSystemBroadcastPickerView()
-        view.preferredExtension = (Bundle.main.bundleIdentifier ?? "vn.nguyenban.nbwebmap") + ".Broadcast"
-        view.showsMicrophoneButton = false
-        for subview in view.subviews {
-            if let button = subview as? UIButton {
-                button.frame = view.bounds
-                button.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+final class BroadcastPickerContainer: UIView {
+    let picker = RPSystemBroadcastPickerView()
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setup()
+    }
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setup()
+    }
+    private func setup() {
+        let bundleID = Bundle.main.bundleIdentifier ?? "vn.nguyenban.nbwebmap"
+        picker.preferredExtension = bundleID + ".Broadcast"
+        picker.showsMicrophoneButton = false
+        addSubview(picker)
+    }
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        picker.frame = bounds
+        for sub in picker.subviews {
+            if let btn = sub as? UIButton {
+                btn.frame = bounds
+                btn.autoresizingMask = [.flexibleWidth, .flexibleHeight]
             }
         }
-        return view
     }
-    func updateUIView(_ uiView: RPSystemBroadcastPickerView, context: Context) {
-        uiView.preferredExtension = (Bundle.main.bundleIdentifier ?? "vn.nguyenban.nbwebmap") + ".Broadcast"
-        for subview in uiView.subviews {
-            if let button = subview as? UIButton {
-                button.frame = uiView.bounds
-                button.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+}
+
+struct BroadcastButton: UIViewRepresentable {
+    func makeUIView(context: Context) -> BroadcastPickerContainer {
+        BroadcastPickerContainer()
+    }
+    func updateUIView(_ uiView: BroadcastPickerContainer, context: Context) {
+        let bundleID = Bundle.main.bundleIdentifier ?? "vn.nguyenban.nbwebmap"
+        uiView.picker.preferredExtension = bundleID + ".Broadcast"
+        for sub in uiView.picker.subviews {
+            if let btn = sub as? UIButton {
+                btn.frame = uiView.bounds
             }
         }
     }

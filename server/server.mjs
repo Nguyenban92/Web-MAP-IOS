@@ -36,6 +36,13 @@ export function createApp({ adminKey, publisherKeys = '', publicURL, now = Date.
   const base = new URL(publicURL);
   if (base.protocol !== 'https:' || base.pathname !== '/' || base.search || base.hash || base.username || base.password) throw Error('PUBLIC_URL must be an HTTPS origin');
   const rooms = new Map(), rates = new Map(), pairs = new Map();
+  const broadcastLogs = [];
+  function addLog(source, msg) {
+    const entry = `[${new Date().toISOString()}] [${source}] ${msg}`;
+    console.log(entry);
+    broadcastLogs.push(entry);
+    if (broadcastLogs.length > 250) broadcastLogs.shift();
+  }
   const managedKeys = keyStore === undefined ? createKeyStore({ url: keyStoreURL, secret: keyStoreSecret, now, fetchImpl }) : keyStore;
   async function publisherFor(secret) {
     if (same(secret, adminKey)) return { id: 'admin', admin: true };
@@ -89,6 +96,16 @@ export function createApp({ adminKey, publisherKeys = '', publicURL, now = Date.
         res.end(await readFile(new URL(`public/${name}`, import.meta.url))); return;
       }
       if (path === '/health' && req.method === 'GET') { send(200, { ok: true }); return; }
+      if (path === '/api/broadcast/log' && req.method === 'POST') {
+        let b; try { b = JSON.parse((await body(req, 4096)).toString()); } catch {}
+        if (b && typeof b.msg === 'string') {
+          addLog(b.source || 'UNKNOWN', b.msg);
+        }
+        send(200, { ok: true }); return;
+      }
+      if (path === '/api/broadcast/logs' && req.method === 'GET') {
+        send(200, { logs: broadcastLogs }); return;
+      }
       const adminMatch = /^\/api\/admin\/keys(?:\/([a-f0-9]{16}))?$/.exec(path);
       if (adminMatch) {
         limited('admin:' + req.socket.remoteAddress, 90, 60000);
@@ -129,6 +146,7 @@ export function createApp({ adminKey, publisherKeys = '', publicURL, now = Date.
         const fps = Number.isFinite(input?.fps) ? input.fps : 30;
         const quality = Number.isFinite(input?.quality) ? input.quality : 0.7;
         rooms.set(id, { owner: publisher.id, publishToken, viewToken, salt, hash, created: now(), lastFrame: 0, frame: null, seq: 0, grants: new Set(), crop, fps, quality, paired: true });
+        addLog('SERVER', `[CREATE ROOM] id: ${id}, owner: ${publisher.id}`);
         send(201, { id, publishToken, viewerURL: `${base.origin}/#${id}.${viewToken}` }); return;
       }
       if (path === '/api/broadcast/auto-pair' && req.method === 'POST') {
@@ -176,12 +194,12 @@ export function createApp({ adminKey, publisherKeys = '', publicURL, now = Date.
             if (r.owner === publisher.id && id !== activeId) {
               const hasViewers = (r.rtcSlots || []).some(x => x.viewer && now() - x.viewerAt < 25000);
               if (!hasViewers) {
-                console.log(`[AUTO-PAIR] Pruning stale room ${id} for publisher ${publisher.id}`);
+                addLog('SERVER', `[AUTO-PAIR] Pruning stale room ${id} for publisher ${publisher.id}`);
                 rooms.delete(id);
               }
             }
           }
-          console.log(`[AUTO-PAIR] Paired publisher ${publisher.id} with latest room ${activeId}`);
+          addLog('SERVER', `[AUTO-PAIR] Paired publisher ${publisher.id} with latest room ${activeId}`);
         }
         const config = {
           server: base.origin,
@@ -215,12 +233,13 @@ export function createApp({ adminKey, publisherKeys = '', publicURL, now = Date.
       if (action === 'rtc') {
         const key = bearer(req);
         if (!same(key,room.publishToken) && !room.grants.has(key)) throw fail(401,'Unauthorized');
+        const slot = new URL(req.url, 'http://localhost').searchParams.get('slot');
         let input;
         if (req.method === 'POST') {
           try { input = JSON.parse((await body(req, 70000)).toString()); } catch(e) { throw e.status ? e : fail(400,'Invalid JSON'); }
+          addLog('SERVER', `[RTC POST] room: ${id}, slot: ${slot || 0}, op: ${input?.op}, role: ${same(key, room.publishToken) ? 'PUB' : 'VIEW'}`);
         }
         if (rooms.get(id)!==room || expired(room)) throw fail(404,'Room closed');
-        const slot = new URL(req.url, 'http://localhost').searchParams.get('slot');
         send(200,rtc(room,id,key,req.method,input,slot));return;
       }
       if (action === 'status' && req.method === 'GET') {
