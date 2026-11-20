@@ -100,6 +100,9 @@ export function createRTC({ now, fail, limited, iceServers = DEFAULT_ICE_SERVERS
     }else if(method!=='GET')throw fail(405,'Method not allowed');
     if(publisher)r.publisherAt=now();else{if(r.viewer!==key)throw fail(409,'Join first');r.viewerAt=now();}
     const activeIce = ice(id,slot);
-    return{slot,epoch:r.epoch,viewer:!!r.viewer,publisherOnline:now()-r.publisherAt<15000&&r.publisherAt>0,offer:r.offer,answer:r.answer,candidates:publisher?r.viewerCandidates:r.publisherCandidates,iceServers:activeIce,relayAvailable:!!turnSecret&&turnURLs.length>0||activeIce.some(s=>[].concat(s.urls).some(u=>/^turns?:/.test(u)))};
+    const pubOnline = (r.publisherAt > 0 && now() - r.publisherAt < 15000) ||
+      (Boolean(room.rtcSlots) && room.rtcSlots.some(x => x.publisherAt > 0 && now() - x.publisherAt < 15000)) ||
+      (room.lastFrame > 0 && now() - room.lastFrame < 15000);
+    return{slot,epoch:r.epoch,viewer:!!r.viewer,publisherOnline:pubOnline,offer:r.offer,answer:r.answer,candidates:publisher?r.viewerCandidates:r.publisherCandidates,iceServers:activeIce,relayAvailable:!!turnSecret&&turnURLs.length>0||activeIce.some(s=>[].concat(s.urls).some(u=>/^turns?:/.test(u)))};
   };
 }

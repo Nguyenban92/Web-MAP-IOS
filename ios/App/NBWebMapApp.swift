@@ -109,7 +109,16 @@ final class AppModel: ObservableObject {
               (response as? HTTPURLResponse)?.statusCode == 200,
               let v = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
         let viewers = v["viewers"] as? Int ?? 0, live = v["liveViewers"] as? Int ?? 0
-        status = live > 0 ? "Đang phát trực tiếp • \(live)/4 người xem" : ((v["paired"] as? Bool == true) ? "Đã ghép nối • Đang chờ người xem (\(viewers)/4)" : "Chờ bật Ma Giáo Live Map Broadcast")
+        let pubOnline = v["publisherOnline"] as? Bool ?? false
+        if live > 0 {
+            status = "Đang phát trực tiếp • \(live)/4 người xem"
+        } else if pubOnline {
+            status = viewers > 0 ? "Đang truyền tín hiệu • \(viewers)/4 người xem" : "Máy phát online • Đang chờ người xem"
+        } else if v["paired"] as? Bool == true {
+            status = viewers > 0 ? "Đã ghép nối • Đang chờ người xem (\(viewers)/4)" : "Đã ghép nối • Chờ người xem mở link"
+        } else {
+            status = "Chờ bật Ma Giáo Live Map Broadcast"
+        }
     }
 
     func save() throws {
@@ -424,11 +433,17 @@ struct ContentView: View {
                                 .tint(Studio.aqua)
                                 .foregroundStyle(.black)
                                 
-                                HStack(spacing: 6) {
-                                    BroadcastButton().frame(width: 44, height: 44)
-                                    Text("BẬT PHÁT")
-                                        .font(.subheadline.bold())
-                                        .foregroundStyle(.white)
+                                ZStack {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "record.circle.fill")
+                                            .font(.body.bold())
+                                            .foregroundStyle(.white)
+                                        Text("BẬT PHÁT")
+                                            .font(.subheadline.bold())
+                                            .foregroundStyle(.white)
+                                    }
+                                    BroadcastButton()
+                                        .opacity(0.015)
                                 }
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 50)
@@ -611,12 +626,26 @@ struct CropEditor: View {
 
 struct BroadcastButton: UIViewRepresentable {
     func makeUIView(context: Context) -> RPSystemBroadcastPickerView {
-        let view = RPSystemBroadcastPickerView(frame: CGRect(x: 0, y: 0, width: 55, height: 55))
+        let view = RPSystemBroadcastPickerView()
         view.preferredExtension = (Bundle.main.bundleIdentifier ?? "vn.nguyenban.nbwebmap") + ".Broadcast"
         view.showsMicrophoneButton = false
+        for subview in view.subviews {
+            if let button = subview as? UIButton {
+                button.frame = view.bounds
+                button.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            }
+        }
         return view
     }
-    func updateUIView(_ uiView: RPSystemBroadcastPickerView, context: Context) {}
+    func updateUIView(_ uiView: RPSystemBroadcastPickerView, context: Context) {
+        uiView.preferredExtension = (Bundle.main.bundleIdentifier ?? "vn.nguyenban.nbwebmap") + ".Broadcast"
+        for subview in uiView.subviews {
+            if let button = subview as? UIButton {
+                button.frame = uiView.bounds
+                button.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            }
+        }
+    }
 }
 
 struct QRSheet: View {

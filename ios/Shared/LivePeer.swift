@@ -97,8 +97,8 @@ final class LivePeer: NSObject, RTCPeerConnectionDelegate {
     private func tick() {
         guard !stopped else { return }
         if Date().timeIntervalSince(signalSuccess)>15 {
-            // Fail closed: a dead signaling service must not keep a revoked room streaming forever.
-            report("Mất máy chủ quá 15 giây — dừng phiên. Kết nối lại khi có mạng."); shutdown(); onEnded?(); return
+            report("Đang kết nối lại máy chủ...")
+            self.initialOperation = self.publisher ? "reset" : "join"
         }
         flushOperations()
         guard !pollBusy else { return }; pollBusy = true

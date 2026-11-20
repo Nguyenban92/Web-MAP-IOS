@@ -1,11 +1,10 @@
 import ReplayKit
-import Vision
 import CoreImage
 import ImageIO
 import WebRTC
 
 final class SampleHandler: RPBroadcastSampleHandler {
-    private let context = CIContext(options:[.cacheIntermediates:false])
+    private let context = CIContext(options: [.cacheIntermediates: false])
     private let lock = NSLock()
     private var active = false
     private var config: BroadcastConfig?
@@ -22,8 +21,8 @@ final class SampleHandler: RPBroadcastSampleHandler {
         return URLSession(configuration: c)
     }()
     private var startedAt = 0.0
-    private var lastScan = 0.0
     private var pairingBusy = false
+    private var syncTimer: DispatchSourceTimer?
     
     private let serverURL = "https://magiao-live-map-aov.onrender.com"
     private let adminKey = "MG-FvEw0o7qt-STgTZOUbWvbNpS"
@@ -32,6 +31,34 @@ final class SampleHandler: RPBroadcastSampleHandler {
         startedAt = ProcessInfo.processInfo.systemUptime
         lock.lock(); active = true; lock.unlock()
         tryAutoPair()
+        startSyncTimer()
+    }
+    
+    private func startSyncTimer() {
+        let t = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .utility))
+        t.schedule(deadline: .now() + 2.0, repeating: .seconds(3))
+        t.setEventHandler { [weak self] in
+            guard let self = self else { return }
+            self.lock.lock()
+            let isRunning = self.active
+            let currentRoomID = self.config?.room.id
+            self.lock.unlock()
+            guard isRunning else { return }
+            
+            if currentRoomID == nil {
+                self.tryAutoPair()
+                return
+            }
+            
+            if let saved = SharedStore.read(), saved.enabled, saved.crop.valid, saved.room.id != currentRoomID {
+                self.switchRoom(saved)
+                return
+            }
+            
+            self.checkServerAutoPair(currentRoomID: currentRoomID)
+        }
+        self.syncTimer = t
+        t.resume()
     }
     
     private func tryAutoPair() {
@@ -48,10 +75,38 @@ final class SampleHandler: RPBroadcastSampleHandler {
         guard self.active, self.config == nil else { return }
         self.config = c
         let bitrate = Int(350000 + c.quality * 850000)
-        self.peers = (0..<4).map {
-            LivePeer(server: c.server, roomID: c.room.id, credential: c.room.publishToken, publisher: true, slot: $0, fps: Int(c.fps), maxBitrate: bitrate)
+        self.peers = (0..<4).map { slot in
+            let peer = LivePeer(server: c.server, roomID: c.room.id, credential: c.room.publishToken, publisher: true, slot: slot, fps: Int(c.fps), maxBitrate: bitrate)
+            peer.onEnded = { [weak self] in
+                self?.handlePeerEnded(roomID: c.room.id)
+            }
+            return peer
         }
         self.peers.forEach { $0.start() }
+    }
+
+    private func switchRoom(_ c: BroadcastConfig) {
+        lock.lock()
+        guard self.active else { lock.unlock(); return }
+        let oldPeers = self.peers
+        self.peers = []
+        self.config = nil
+        lock.unlock()
+        oldPeers.forEach { $0.stop() }
+        startWithConfig(c)
+    }
+
+    private func handlePeerEnded(roomID: String) {
+        lock.lock()
+        guard self.active, self.config?.room.id == roomID else { lock.unlock(); return }
+        self.config = nil
+        let oldPeers = self.peers
+        self.peers = []
+        lock.unlock()
+        oldPeers.forEach { $0.stop() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            self?.tryAutoPair()
+        }
     }
 
     private func requestServerAutoPair() {
@@ -78,33 +133,19 @@ final class SampleHandler: RPBroadcastSampleHandler {
         }.resume()
     }
 
-    private func scanPairing(_ sampleBuffer: CMSampleBuffer) {
-        let now = ProcessInfo.processInfo.systemUptime
-        lock.lock(); let shouldScan = !pairingBusy && now - lastScan > 1.2; lock.unlock()
-        guard shouldScan, let pixel = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-        lastScan = now
-        let request = VNDetectBarcodesRequest(); request.symbologies = [.qr]
-        try? VNImageRequestHandler(cvPixelBuffer: pixel, options: [:]).perform([request])
-        guard let payload = request.results?.compactMap({ $0.payloadStringValue }).first(where: { $0.hasPrefix("NBWM2:https://") }),
-              let url = URL(string: String(payload.dropFirst(6))), url.scheme == "https", url.host != nil,
-              url.user == nil, url.password == nil, url.query == nil, url.path == "/" || url.path.isEmpty,
-              let fragment = url.fragment, fragment.hasPrefix("pair.") else {
-            requestServerAutoPair()
-            return
-        }
-        let key = String(fragment.dropFirst(5))
-        guard key.count == 32 else { return }
-        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)!
-        components.fragment = nil; components.path = "/api/pair"
-        var req = URLRequest(url: components.url!); req.httpMethod = "POST"
-        req.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-        lock.lock(); pairingBusy = true; lock.unlock()
+    private func checkServerAutoPair(currentRoomID: String?) {
+        guard let url = URL(string: "\(serverURL)/api/broadcast/auto-pair") else { return }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.timeoutInterval = 5
+        req.setValue("Bearer \(adminKey)", forHTTPHeaderField: "Authorization")
         session.dataTask(with: req) { [weak self] data, response, _ in
-            guard let self = self else { return }
-            self.lock.lock(); defer { self.lock.unlock() }; self.pairingBusy = false
-            guard self.active, (response as? HTTPURLResponse)?.statusCode == 200, let data = data,
+            guard let self = self, self.active else { return }
+            guard (response as? HTTPURLResponse)?.statusCode == 200, let data = data,
                   let c = try? JSONDecoder().decode(BroadcastConfig.self, from: data), c.enabled, c.crop.valid else { return }
-            self.startWithConfig(c)
+            if let current = currentRoomID, c.room.id != current {
+                self.switchRoom(c)
+            }
         }.resume()
     }
 
@@ -112,45 +153,35 @@ final class SampleHandler: RPBroadcastSampleHandler {
         guard sampleBufferType == .video else { return }
         lock.lock(); let c = config; let peers = self.peers; let running = active; lock.unlock()
         guard running else { return }
-        guard let c = c, !peers.isEmpty else {
-            let now = ProcessInfo.processInfo.systemUptime
-            if now - lastScan > 1.5 {
-                lastScan = now
-                if let saved = SharedStore.read(), saved.enabled, saved.crop.valid {
-                    startWithConfig(saved)
-                } else {
-                    requestServerAutoPair()
-                    scanPairing(sampleBuffer)
-                }
-            }
-            return
-        }
+        guard let c = c, !peers.isEmpty else { return }
+
         let now = ProcessInfo.processInfo.systemUptime
         let thermal = ProcessInfo.processInfo.thermalState
         let targetFPS = thermal == .serious || thermal == .critical ? min(15, c.fps) : c.fps
         guard now - lastFrame >= 0.9 / max(1, min(60, targetFPS)) else { return }
         lastFrame = now
+
         autoreleasepool {
             guard let raw = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
             let rawFrame = CIImage(cvPixelBuffer: raw); var frame = rawFrame
             if let a = CMGetAttachment(sampleBuffer, key: RPVideoSampleOrientationKey as CFString, attachmentModeOut: nil) as? NSNumber,
                let o = CGImagePropertyOrientation(rawValue: a.uint32Value) {
-                let oriented = rawFrame.oriented(o)
-                let ra = rawFrame.extent.width / rawFrame.extent.height
-                let oa = oriented.extent.width / oriented.extent.height
-                if abs(oa - c.crop.referenceAspect) < abs(ra - c.crop.referenceAspect) { frame = oriented }
+                frame = rawFrame.oriented(o)
             }
             if c.crop.rotate180 ?? true { frame = frame.oriented(.down) }
-            let e = frame.extent
-            guard abs(e.width / e.height - c.crop.referenceAspect) / c.crop.referenceAspect < 0.04 else {
-                if now - lastBlack > 1 { lastBlack = now; peers.forEach { sendBlack($0, now: now) } }
-                return
+            
+            // Normalize landscape orientation for game play
+            if frame.extent.width < frame.extent.height {
+                frame = frame.oriented(.right)
             }
+            let e = frame.extent
+            guard e.width > 20, e.height > 20 else { return }
+            
             let rawW = e.width * c.crop.width
             let rawH = e.height * c.crop.height
             let mapSide = min(rawW, rawH)
             let cropX = e.minX + e.width * c.crop.x
-            let cropY = e.minY + e.height * (1 - c.crop.y) - mapSide
+            let cropY = e.minY + e.height * (1.0 - c.crop.y) - mapSide
             let r = CGRect(x: cropX, y: cropY, width: mapSide, height: mapSide).integral.intersection(e)
             guard r.width > 1, r.height > 1 else { return }
             let actualSide = min(r.width, r.height)
@@ -201,6 +232,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
     override func broadcastResumed() {}
 
     override func broadcastFinished() {
+        syncTimer?.cancel(); syncTimer = nil
         lock.lock(); active = false; let p = peers; peers = []; config = nil; lock.unlock()
         p.forEach { $0.stop() }
         session.invalidateAndCancel()

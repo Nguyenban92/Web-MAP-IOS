@@ -168,8 +168,20 @@ export function createApp({ adminKey, publisherKeys = '', publicURL, now = Date.
           };
           rooms.set(id, activeRoom);
           activeId = id;
+          console.log(`[AUTO-PAIR] Initialized fresh room ${activeId} for publisher ${publisher.id}`);
         } else {
           activeRoom.paired = true;
+          // Clean up older stale rooms of this publisher that have no viewers
+          for (const [id, r] of rooms) {
+            if (r.owner === publisher.id && id !== activeId) {
+              const hasViewers = (r.rtcSlots || []).some(x => x.viewer && now() - x.viewerAt < 25000);
+              if (!hasViewers) {
+                console.log(`[AUTO-PAIR] Pruning stale room ${id} for publisher ${publisher.id}`);
+                rooms.delete(id);
+              }
+            }
+          }
+          console.log(`[AUTO-PAIR] Paired publisher ${publisher.id} with latest room ${activeId}`);
         }
         const config = {
           server: base.origin,

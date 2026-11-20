@@ -291,10 +291,10 @@ async function connectWithPassword(pwd = '') {
         }
         message('Đang kết nối lại…');
       }
-      if (Date.now() - lastServer > 15000) {
+      if (Date.now() - lastServer > 30000) {
         stop();
         badge('MẤT MẠNG');
-        message('Mất máy chủ quá 15 giây. Hãy kết nối lại.');
+        message('Mất kết nối máy chủ quá 30 giây. Hãy kết nối lại.');
         break;
       }
       await sleep(1000);
