@@ -466,8 +466,8 @@ struct ContentView: View {
                                     Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
                                     Text("BẮT BUỘC ĐỂ LÊN HÌNH TRÊN MÁY TÍNH:").font(.caption.bold()).foregroundStyle(.yellow)
                                 }
-                                Text("1. Chạm vào nút tròn ở thanh màu xanh bên trên.").font(.caption2.bold()).foregroundStyle(.white)
-                                Text("2. Chọn đúng dòng \"Live - Ma Giáo AOV\" rồi bấm \"Bắt đầu truyền phát\".").font(.caption2.bold()).foregroundStyle(.white)
+                                Text("1. Chạm vào nút màu xanh BẬT PHÁT MINI-MAP ở trên.").font(.caption2.bold()).foregroundStyle(.white)
+                                Text("2. Hộp thoại hiện lên: Chọn đúng dòng \"Live - Ma Giáo AOV\" rồi bấm \"Bắt đầu truyền phát\".").font(.caption2.bold()).foregroundStyle(.white)
                                 Text("3. Khi có chấm đỏ ghi màn hình trên góc iPhone và trạng thái chuyển sang XANH LÁ CÂY thì vào game Liên Quân chiến bình thường!").font(.caption2).foregroundStyle(.white.opacity(0.9))
                             }
                             .padding(12)
@@ -636,6 +636,7 @@ final class BroadcastButtonRowView: UIView {
     let picker = RPSystemBroadcastPickerView()
     private let titleLabel = UILabel()
     private let subLabel = UILabel()
+    private let iconView = UIImageView()
     private let textStack = UIStackView()
 
     override init(frame: CGRect) {
@@ -652,57 +653,59 @@ final class BroadcastButtonRowView: UIView {
         layer.cornerRadius = 14
         clipsToBounds = true
 
+        iconView.image = UIImage(systemName: "record.circle.fill")
+        iconView.tintColor = .white
+        iconView.contentMode = .scaleAspectFit
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+        iconView.isUserInteractionEnabled = false
+
         titleLabel.text = "BẬT PHÁT MINI-MAP"
         titleLabel.textColor = .white
         titleLabel.font = .systemFont(ofSize: 15, weight: .bold)
+        titleLabel.isUserInteractionEnabled = false
 
-        subLabel.text = "Chạm nút tròn bên phải để bật quay"
+        subLabel.text = "Chạm vào đây → chọn Live - Ma Giáo AOV"
         subLabel.textColor = UIColor.white.withAlphaComponent(0.85)
         subLabel.font = .systemFont(ofSize: 12)
+        subLabel.isUserInteractionEnabled = false
 
-        textStack.axis = .vertical
-        textStack.spacing = 3
+        let col = UIStackView(arrangedSubviews: [titleLabel, subLabel])
+        col.axis = .vertical
+        col.spacing = 2
+        col.isUserInteractionEnabled = false
+
+        textStack.axis = .horizontal
+        textStack.spacing = 10
+        textStack.alignment = .center
         textStack.translatesAutoresizingMaskIntoConstraints = false
         textStack.isUserInteractionEnabled = false
-        textStack.addArrangedSubview(titleLabel)
-        textStack.addArrangedSubview(subLabel)
+        textStack.addArrangedSubview(iconView)
+        textStack.addArrangedSubview(col)
         addSubview(textStack)
-
-        picker.showsMicrophoneButton = false
-        picker.preferredExtension = nil
-        picker.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(picker)
 
         NSLayoutConstraint.activate([
             textStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
             textStack.centerYAnchor.constraint(equalTo: centerYAnchor),
-            textStack.trailingAnchor.constraint(lessThanOrEqualTo: picker.leadingAnchor, constant: -10),
-
-            picker.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
-            picker.centerYAnchor.constraint(equalTo: centerYAnchor),
-            picker.widthAnchor.constraint(equalToConstant: 48),
-            picker.heightAnchor.constraint(equalToConstant: 48)
+            iconView.widthAnchor.constraint(equalToConstant: 24),
+            iconView.heightAnchor.constraint(equalToConstant: 24)
         ])
 
-        let tap = UITapGestureRecognizer(target: self, action: #selector(handleRowTap))
-        addGestureRecognizer(tap)
+        picker.showsMicrophoneButton = false
+        picker.preferredExtension = nil
+        picker.backgroundColor = .clear
+        picker.alpha = 0.05
+        addSubview(picker)
     }
 
-    @objc private func handleRowTap(_ gesture: UITapGestureRecognizer) {
-        let loc = gesture.location(in: picker)
-        if !picker.bounds.contains(loc) {
-            if let btn = findButton(in: picker) {
-                btn.sendActions(for: .touchUpInside)
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        picker.frame = bounds
+        for sub in picker.subviews {
+            sub.frame = bounds
+            for nested in sub.subviews {
+                nested.frame = bounds
             }
         }
-    }
-
-    private func findButton(in v: UIView) -> UIButton? {
-        if let b = v as? UIButton { return b }
-        for sub in v.subviews {
-            if let b = findButton(in: sub) { return b }
-        }
-        return nil
     }
 }
 
