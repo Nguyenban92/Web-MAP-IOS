@@ -84,15 +84,25 @@ final class SampleHandler: RPBroadcastSampleHandler {
             guard abs(e.width/e.height-c.crop.referenceAspect)/c.crop.referenceAspect<0.04 else {
                 if now-lastBlack>1 {lastBlack=now;peers.forEach{sendBlack($0,now:now)}};return
             }
-            let r=CGRect(x:e.minX+e.width*c.crop.x,y:e.minY+e.height*(1-c.crop.y-c.crop.height),width:e.width*c.crop.width,height:e.height*c.crop.height).integral.intersection(e)
-            guard r.width>1,r.height>1 else{return}
-            let side:Double=c.quality>=0.85 ? 960 : (c.quality>=0.6 ? 640:384)
-            let scale=min(1,side/max(r.width,r.height))
-            let w=max(2,Int(r.width*scale)/2*2),h=max(2,Int(r.height*scale)/2*2)
-            guard let output=pixel(width:w,height:h) else{return}
-            let cropped=frame.cropped(to:r).transformed(by:CGAffineTransform(translationX:-r.minX,y:-r.minY)).transformed(by:CGAffineTransform(scaleX:Double(w)/r.width,y:Double(h)/r.height))
-            context.render(cropped,to:output)
-            peers.forEach{$0.push(output,timeNs:Int64(now*1_000_000_000))}
+            let rawW = e.width * c.crop.width
+            let rawH = e.height * c.crop.height
+            let mapSide = min(rawW, rawH)
+            let cropX = e.minX + e.width * c.crop.x
+            let cropY = e.minY + e.height * (1 - c.crop.y) - mapSide
+            let r = CGRect(x: cropX, y: cropY, width: mapSide, height: mapSide).integral.intersection(e)
+            guard r.width > 1, r.height > 1 else { return }
+            let actualSide = min(r.width, r.height)
+            let targetSide: Double = c.quality >= 0.85 ? 960 : (c.quality >= 0.6 ? 640 : 384)
+            let scale = min(1.0, targetSide / actualSide)
+            let sidePixels = max(2, Int(actualSide * scale) / 2 * 2)
+            let w = sidePixels, h = sidePixels
+            guard let output = pixel(width: w, height: h) else { return }
+            let squareCrop = CGRect(x: r.minX, y: r.minY, width: actualSide, height: actualSide)
+            let cropped = frame.cropped(to: squareCrop)
+                .transformed(by: CGAffineTransform(translationX: -r.minX, y: -r.minY))
+                .transformed(by: CGAffineTransform(scaleX: Double(w) / actualSide, y: Double(h) / actualSide))
+            context.render(cropped, to: output)
+            peers.forEach { $0.push(output, timeNs: Int64(now * 1_000_000_000)) }
         }
     }
     private func pixel(width:Int,height:Int)->CVPixelBuffer? {

@@ -540,6 +540,39 @@ header.bio-header {
   transform: translateX(-3px);
 }
 
+.btn-tap-to-play {
+  position: absolute;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 32px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
+  border: 2px solid #ffffff;
+  color: #1a1a2e;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 0 32px rgba(246, 211, 101, 0.7), 0 8px 24px rgba(0, 0, 0, 0.5);
+  animation: pulse-tap-btn 1.6s infinite ease-in-out;
+  transition: transform 0.2s ease;
+}
+
+.btn-tap-to-play:hover {
+  transform: scale(1.06);
+}
+
+.btn-tap-to-play[hidden] {
+  display: none !important;
+}
+
+@keyframes pulse-tap-btn {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 24px rgba(246, 211, 101, 0.5); }
+  50% { transform: scale(1.05); box-shadow: 0 0 44px rgba(246, 211, 101, 0.9); }
+}
+
 #placeholder strong {
   display: block;
   font-family: var(--font-display);

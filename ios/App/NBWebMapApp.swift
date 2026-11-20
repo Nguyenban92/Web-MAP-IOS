@@ -10,6 +10,8 @@ struct NBWebMapApp: App {
 
 @MainActor
 final class AppModel: ObservableObject {
+    static let defaultAdminKey = "MG-FvEw0o7qt-STgTZOUbWvbNpS"
+    
     @Published var server: String = {
         let saved = UserDefaults.standard.string(forKey: "server") ?? ""
         return saved.isEmpty ? "https://magiao-live-map-aov.onrender.com" : saved
@@ -17,12 +19,15 @@ final class AppModel: ObservableObject {
         didSet { UserDefaults.standard.set(server, forKey: "server") }
     }
     
-    @Published var adminKey: String = UserDefaults.standard.string(forKey: "adminKey") ?? "" {
+    @Published var adminKey: String = {
+        let saved = UserDefaults.standard.string(forKey: "adminKey") ?? ""
+        return saved.isEmpty ? defaultAdminKey : saved
+    }() {
         didSet { UserDefaults.standard.set(adminKey, forKey: "adminKey") }
     }
     
     @Published var password = ""
-    @Published var crop = Crop(x: 0.055, y: 0.002, width: 0.144, height: 0.317, referenceAspect: 2.165, rotate180: true, version: 2)
+    @Published var crop = Crop(x: 0.055, y: 0.002, width: 0.144, height: 0.311, referenceAspect: 2.165, rotate180: true, version: 3)
     @Published var screenshot: UIImage?
     @Published var room: Room?
     @Published var fps: Double = 30
@@ -32,14 +37,15 @@ final class AppModel: ObservableObject {
     @Published var status = "Chưa phát"
     @Published var pairing = ""
     
-    static let calibratedCrop = Crop(x: 0.055, y: 0.002, width: 0.144, height: 0.317, referenceAspect: 2.165, rotate180: true, version: 2)
+    static let calibratedCrop = Crop(x: 0.055, y: 0.002, width: 0.144, height: 0.311, referenceAspect: 2.165, rotate180: true, version: 3)
     
     init() {
-        if let savedKey = UserDefaults.standard.string(forKey: "adminKey"), !savedKey.isEmpty {
-            adminKey = savedKey
+        if adminKey.isEmpty {
+            adminKey = Self.defaultAdminKey
+            UserDefaults.standard.set(Self.defaultAdminKey, forKey: "adminKey")
         }
         if let data = UserDefaults.standard.data(forKey: "crop"), let saved = try? JSONDecoder().decode(Crop.self, from: data) {
-            if (saved.version ?? 1) >= 2 && saved.width <= 0.18 {
+            if (saved.version ?? 1) >= 3 && saved.width <= 0.18 {
                 crop = saved
             } else {
                 crop = Self.calibratedCrop
@@ -53,7 +59,7 @@ final class AppModel: ObservableObject {
         if let c = SharedStore.read(), c.enabled {
             room = c.room
             server = c.server
-            if (c.crop.version ?? 1) >= 2 && c.crop.width <= 0.18 {
+            if (c.crop.version ?? 1) >= 3 && c.crop.width <= 0.18 {
                 crop = c.crop
             } else {
                 crop = Self.calibratedCrop
@@ -109,7 +115,7 @@ final class AppModel: ObservableObject {
     func save() throws {
         if crop.referenceAspect <= 0 { crop.referenceAspect = 2.165 }
         if crop.rotate180 == nil { crop.rotate180 = true }
-        if crop.version == nil { crop.version = 2 }
+        if crop.version == nil { crop.version = 3 }
         guard crop.valid else { throw failure("Vùng chọn không hợp lệ") }
         UserDefaults.standard.set(server, forKey: "server")
         UserDefaults.standard.set(try JSONEncoder().encode(crop), forKey: "crop")
@@ -132,13 +138,14 @@ final class AppModel: ObservableObject {
                   url.path.isEmpty || url.path == "/" else {
                 throw failure("Địa chỉ máy chủ không hợp lệ: \(server)")
             }
+            if adminKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                adminKey = Self.defaultAdminKey
+            }
             let trimmedKey = adminKey.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmedKey.isEmpty else { throw failure("Vui lòng dán Khóa tạo phòng (Key).") }
-            adminKey = trimmedKey
             
             if crop.referenceAspect <= 0 { crop.referenceAspect = 2.165 }
             if crop.rotate180 == nil { crop.rotate180 = true }
-            if crop.version == nil { crop.version = 2 }
+            if crop.version == nil { crop.version = 3 }
 
             var request = URLRequest(url: url.appendingPathComponent("api/rooms"))
             request.httpMethod = "POST"
@@ -191,8 +198,8 @@ final class AppModel: ObservableObject {
         crop.x = 0.055
         crop.y = 0.002
         crop.width = 0.144
-        crop.height = 0.317
-        crop.version = 2
+        crop.height = 0.311
+        crop.version = 3
         try? save()
         if let bytes = normalized.jpegData(compressionQuality: 0.8) { try? bytes.write(to: previewURL, options: .atomic) }
         message = "Đã nhận diện chuẩn vị trí bản đồ Liên Quân Mobile từ ảnh game!"
@@ -206,7 +213,6 @@ struct ContentView: View {
     @StateObject private var model = AppModel()
     @State private var photo: PhotosPickerItem?
     @State private var showQR = false
-    @State private var showKey = false
     @State private var showCropAdjustment = false
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     
@@ -243,61 +249,21 @@ struct ContentView: View {
                     .padding(.top, 4)
                     
                     if model.room == nil {
-                        // Card nhập Key & Tạo phòng
+                        // Card Tạo phòng
                         VStack(alignment: .leading, spacing: 18) {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Label("Khóa tạo phòng (Key)", systemImage: "key.fill")
-                                    .font(.subheadline.bold())
+                            // Bản quyền VIP đã kích hoạt vĩnh viễn
+                            HStack(spacing: 8) {
+                                Image(systemName: "checkmark.seal.fill")
                                     .foregroundStyle(Studio.gold)
-                                
-                                HStack(spacing: 8) {
-                                    Group {
-                                        if showKey {
-                                            TextField("Dán khóa tạo phòng vào đây...", text: $model.adminKey)
-                                                .textInputAutocapitalization(.never)
-                                                .autocorrectionDisabled()
-                                        } else {
-                                            SecureField("Dán khóa tạo phòng vào đây...", text: $model.adminKey)
-                                        }
-                                    }
-                                    .font(.subheadline)
-                                    .padding(12)
-                                    .background(Color.black.opacity(0.4), in: RoundedRectangle(cornerRadius: 12))
-                                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Studio.aqua.opacity(0.3), lineWidth: 1))
-                                    
-                                    Button {
-                                        showKey.toggle()
-                                    } label: {
-                                        Image(systemName: showKey ? "eye.slash.fill" : "eye.fill")
-                                            .foregroundStyle(.secondary)
-                                            .frame(width: 38, height: 44)
-                                    }
-                                    
-                                    if !model.adminKey.isEmpty {
-                                        Button {
-                                            model.adminKey = ""
-                                        } label: {
-                                            Image(systemName: "xmark.circle.fill")
-                                                .foregroundStyle(.secondary)
-                                                .frame(width: 38, height: 44)
-                                        }
-                                    } else {
-                                        Button("Dán") {
-                                            if let clip = UIPasteboard.general.string {
-                                                model.adminKey = clip.trimmingCharacters(in: .whitespacesAndNewlines)
-                                            }
-                                        }
-                                        .font(.subheadline.bold())
-                                        .buttonStyle(.bordered)
-                                        .tint(Studio.aqua)
-                                        .frame(height: 44)
-                                    }
-                                }
-                                
-                                Text("Khóa sẽ được lưu vĩnh viễn trên máy trừ khi bấm xóa.")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
+                                Text("Bản quyền Ma Giáo VIP: Đã kích hoạt sẵn")
+                                    .font(.caption.bold())
+                                    .foregroundStyle(Studio.gold)
+                                Spacer()
                             }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Studio.gold.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Studio.gold.opacity(0.3), lineWidth: 1))
                             
                             VStack(alignment: .leading, spacing: 8) {
                                 Label("Mật khẩu người xem (Tùy chọn)", systemImage: "lock.shield")
@@ -309,6 +275,10 @@ struct ContentView: View {
                                     .padding(12)
                                     .background(Color.black.opacity(0.4), in: RoundedRectangle(cornerRadius: 12))
                                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.15), lineWidth: 1))
+                                
+                                Text("Nếu đặt mật khẩu, người xem phải nhập đúng mật khẩu mới vào được phòng.")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
                             }
                             
                             // Mục Vùng bản đồ chuẩn AOV (Thu gọn / Mở rộng để xem hoặc đổi ảnh)
@@ -395,8 +365,8 @@ struct ContentView: View {
                                 )
                                 .shadow(color: Studio.gold.opacity(0.4), radius: 10, y: 4)
                             }
-                            .disabled(model.working || model.adminKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                            .opacity((model.working || model.adminKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) ? 0.6 : 1.0)
+                            .disabled(model.working)
+                            .opacity(model.working ? 0.6 : 1.0)
                         }
                         .padding(20)
                         .studioCard(accent: Studio.gold)
@@ -652,7 +622,7 @@ struct RootView: View {
             ViewerView().tabItem { Label("Xem / PiP", systemImage: "pip") }
             NavigationStack {
                 ScrollView {
-                    Text("Ma Giáo Live Map AOV\n\n1. Nhập Khóa tạo phòng (Key) rồi bấm TẠO PHÒNG.\n2. Bấm Gửi link chia sẻ cho đồng đội hoặc quét mã QR.\n3. Bấm Bắt đầu phát → Chạm biểu tượng ghi màn hình → Chọn Ma Giáo Live Map Broadcast.\n4. Sau trận đấu bấm DỪNG PHÁT.")
+                    Text("Ma Giáo Live Map AOV\n\n1. Nhập mật khẩu người xem (hoặc để trống) rồi bấm TẠO PHÒNG.\n2. Bấm Gửi link chia sẻ cho đồng đội hoặc quét mã QR.\n3. Bấm Bắt đầu phát → Chạm biểu tượng ghi màn hình → Chọn Live - Ma Giáo AOV.\n4. Sau trận đấu bấm DỪNG PHÁT.")
                         .padding()
                 }
                 .navigationTitle("Hướng dẫn")

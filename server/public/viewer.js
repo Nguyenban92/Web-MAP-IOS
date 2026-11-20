@@ -19,13 +19,24 @@ function getPieces() {
 let grant = '', peer = null, epoch = -1, remoteReady = false, cursor = 0, active = false, generation = 0, lastServer = 0, latestFrames = -1, lastFrameAt = 0;
 let answerSDP = null;
 let signalQueue = [], sending = false, hasJoined = false;
-const message = text => $('status').textContent = text;
+let reconnecting = false, connectingSince = 0;
+
+const message = text => {
+  const el = $('status');
+  if (el) el.textContent = text;
+};
+
+const badge = text => {
+  const el = $('badge');
+  if (el) el.textContent = text;
+};
+
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function api(action, body, key = grant, method = body === undefined ? 'GET' : 'POST') {
   const p = currentPieces || getPieces();
   if (!p) throw new Error('Chưa có mã phòng');
-  const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), 5000);
+  const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), 6000);
   try {
     const r = await fetch(`/api/rooms/${p[0]}/${action}`, {
       method,
@@ -43,13 +54,34 @@ async function api(action, body, key = grant, method = body === undefined ? 'GET
 }
 
 function clearPeer() {
-  if (peer) { peer.onicecandidate = null; peer.ontrack = null; peer.close(); }
-  peer = null; video.srcObject = null; video.hidden = true; $('placeholder').hidden = false;
-  remoteReady = false; answerSDP = null; cursor = 0; signalQueue = []; latestFrames = -1; lastFrameAt = 0;
+  if (peer) {
+    peer.onicecandidate = null;
+    peer.ontrack = null;
+    peer.onconnectionstatechange = null;
+    peer.oniceconnectionstatechange = null;
+    try { peer.close(); } catch {}
+  }
+  peer = null;
+  video.srcObject = null;
+  video.hidden = true;
+  if ($('placeholder')) $('placeholder').hidden = false;
+  if ($('tapToPlay')) $('tapToPlay').hidden = true;
+  remoteReady = false;
+  answerSDP = null;
+  cursor = 0;
+  signalQueue = [];
+  latestFrames = -1;
+  lastFrameAt = 0;
+  connectingSince = 0;
 }
 
 function stop() {
-  active = false; generation++; clearPeer(); $('join').hidden = false; $('badge').textContent = 'ĐÃ DỪNG';
+  active = false;
+  generation++;
+  clearPeer();
+  $('join').hidden = false;
+  badge('ĐÃ DỪNG');
+  message('Đã dừng xem');
   if (grant && hasJoined) api('rtc', { op: 'leave' }).catch(() => {});
   hasJoined = false;
 }
@@ -73,26 +105,88 @@ function send(payload) {
   flush();
 }
 
+async function triggerAutoReconnect(reason) {
+  if (reconnecting || !active) return;
+  reconnecting = true;
+  badge('KẾT NỐI LẠI');
+  message(reason || 'Đang tự động kết nối lại qua Cloudflare TURN...');
+  clearPeer();
+  epoch = -1;
+  await sleep(1200);
+  try {
+    if (active) {
+      await api('rtc', { op: 'join' });
+      hasJoined = true;
+    }
+  } catch {}
+  reconnecting = false;
+}
+
+function updateStatusDisplay(state) {
+  if (!active || reconnecting) return;
+  if (!state || !state.publisherOnline) {
+    badge('CHỜ PHÁT');
+    message('Chờ máy phát vào game và bật Broadcast...');
+    return;
+  }
+  if (!peer) {
+    badge('KHỞI TẠO');
+    message('Máy phát online · Đang tạo phiên WebRTC...');
+    return;
+  }
+  const cs = peer.connectionState;
+  const ics = peer.iceConnectionState;
+  if (cs === 'connected' || ics === 'connected' || ics === 'completed') {
+    badge('TRỰC TIẾP');
+    message('Đang xem video trực tiếp (Cloudflare Realtime 1TB)');
+  } else if (cs === 'connecting' || ics === 'checking') {
+    badge('KẾT NỐI');
+    message('Đang bắt tay WebRTC qua Cloudflare TURN...');
+  } else if (cs === 'failed' || ics === 'failed') {
+    badge('LỖI MẠNG');
+    triggerAutoReconnect('Mất tín hiệu P2P. Đang tự động kết nối lại qua TURN...');
+  } else {
+    badge('SẴN SÀNG');
+    message('Đang chờ khung hình từ máy phát...');
+  }
+}
+
 async function apply(state, g) {
   if (state.epoch !== epoch) {
-    clearPeer(); epoch = state.epoch;
+    clearPeer();
+    epoch = state.epoch;
     peer = new RTCPeerConnection({ iceServers: state.iceServers, bundlePolicy: 'max-bundle' });
     const p = peer;
     p.onicecandidate = e => {
-      if (peer === p && e.candidate) send({ op: 'candidate', candidate: { sdp: e.candidate.candidate, sdpMid: e.candidate.sdpMid, sdpMLineIndex: e.candidate.sdpMLineIndex } });
+      if (peer === p && e.candidate) {
+        send({ op: 'candidate', candidate: { sdp: e.candidate.candidate, sdpMid: e.candidate.sdpMid, sdpMLineIndex: e.candidate.sdpMLineIndex } });
+      }
     };
     p.ontrack = e => {
       if (peer !== p) return;
       video.srcObject = new MediaStream([e.track]);
       video.hidden = false;
       if ($('placeholder')) $('placeholder').hidden = true;
-      video.play().catch(() => message('Bấm vào màn hình để phát video.'));
+      const playPromise = video.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(() => {
+          if ($('tapToPlay')) $('tapToPlay').hidden = false;
+          message('Chạm nút "CHẠM ĐỂ XEM BẢN ĐỒ" để phát video.');
+        });
+      }
     };
     p.onconnectionstatechange = () => {
       if (peer !== p) return;
-      $('badge').textContent = p.connectionState === 'connected' ? 'TRỰC TIẾP' : 'ĐANG KẾT NỐI';
-      if (p.connectionState === 'connected') message('Đang xem video trực tiếp');
-      if (p.connectionState === 'failed') message(state.relayAvailable ? 'Đang khôi phục kết nối…' : 'Mạng này có thể cần TURN. Chưa có chuyển tiếp trên máy chủ.');
+      updateStatusDisplay(state);
+      if (p.connectionState === 'failed') {
+        triggerAutoReconnect('Mất kết nối P2P. Đang tự động kết nối lại qua TURN...');
+      }
+    };
+    p.oniceconnectionstatechange = () => {
+      if (peer !== p) return;
+      if (p.iceConnectionState === 'failed') {
+        triggerAutoReconnect('Lỗi đường truyền ICE. Đang tự động kết nối lại...');
+      }
     };
   }
   const p = peer;
@@ -132,17 +226,17 @@ async function metrics() {
     }
     video.hidden = false;
     if ($('placeholder')) $('placeholder').hidden = true;
+    if ($('tapToPlay')) $('tapToPlay').hidden = true;
   }
   if (lastFrameAt > 0 && Date.now() - lastFrameAt > 4000) {
     video.hidden = true;
     if ($('placeholder')) $('placeholder').hidden = false;
   }
   const relay = pair && [stats.get(pair.localCandidateId), stats.get(pair.remoteCandidateId)].some(s => s?.candidateType === 'relay');
-  $('metrics').textContent = `${inbound?.framesPerSecond || 0} fps · ${pair?.currentRoundTripTime !== undefined ? Math.round(pair.currentRoundTripTime * 1000) + ' ms RTT' : 'RTT —'} · ${pair ? (relay ? 'TURN' : 'P2P') : 'Chưa có đường truyền'}`;
+  $('metrics').textContent = `${inbound?.framesPerSecond || 0} fps · ${pair?.currentRoundTripTime !== undefined ? Math.round(pair.currentRoundTripTime * 1000) + ' ms RTT' : 'RTT —'} · ${pair ? (relay ? 'TURN (Cloudflare)' : 'P2P Trực Tiếp') : 'Chưa có đường truyền'}`;
 }
 
-$('join').addEventListener('submit', async e => {
-  e.preventDefault();
+async function connectWithPassword(pwd = '') {
   const p = currentPieces || getPieces();
   if (!p) {
     message('Vui lòng mở đúng liên kết phòng do người phát cung cấp.');
@@ -151,15 +245,20 @@ $('join').addEventListener('submit', async e => {
   currentPieces = p;
   stop();
   const g = ++generation;
+  badge('KẾT NỐI');
+  message('Đang kết nối vào phòng…');
   try {
-    message('Đang kết nối…');
-    const access = await api('access', { password: $('password').value }, p[1]);
+    const access = await api('access', { password: pwd }, p[1]);
     if (g !== generation) return;
     grant = access.token;
     await api('rtc', { op: 'join' });
     if (g !== generation) return;
-    hasJoined = true; active = true; lastServer = Date.now(); epoch = -1;
+    hasJoined = true;
+    active = true;
+    lastServer = Date.now();
+    epoch = -1;
     $('join').hidden = true;
+
     while (active && g === generation) {
       try {
         const s = await api('rtc');
@@ -168,22 +267,81 @@ $('join').addEventListener('submit', async e => {
         await apply(s, g);
         await flush();
         await metrics();
-        if (peer?.connectionState === 'connected') message('Đang xem video trực tiếp');
+        updateStatusDisplay(s);
+
+        // Auto-reconnect if stuck in connecting > 12s without incoming video frames
+        if (s.publisherOnline && peer && (peer.connectionState === 'connecting' || peer.iceConnectionState === 'checking')) {
+          if (!connectingSince) connectingSince = Date.now();
+          if (Date.now() - connectingSince > 12000 && latestFrames <= 0) {
+            connectingSince = 0;
+            triggerAutoReconnect('Quá hạn bắt tay WebRTC. Đang tự động kết nối lại qua TURN...');
+          }
+        } else if (peer && (peer.connectionState === 'connected' || peer.iceConnectionState === 'connected')) {
+          connectingSince = 0;
+        }
       } catch (error) {
-        if ([401, 404].includes(error.status)) { stop(); message('Phòng đã đóng hoặc hết hạn.'); break; }
-        if (error.status === 409) { await api('rtc', { op: 'join' }).catch(() => {}); }
+        if ([401, 404].includes(error.status)) {
+          stop();
+          badge('PHÒNG ĐÓNG');
+          message('Phòng đã đóng hoặc hết hạn.');
+          break;
+        }
+        if (error.status === 409) {
+          await api('rtc', { op: 'join' }).catch(() => {});
+        }
         message('Đang kết nối lại…');
       }
-      if (Date.now() - lastServer > 15000) { stop(); message('Mất máy chủ quá 15 giây. Hãy kết nối lại.'); break; }
+      if (Date.now() - lastServer > 15000) {
+        stop();
+        badge('MẤT MẠNG');
+        message('Mất máy chủ quá 15 giây. Hãy kết nối lại.');
+        break;
+      }
       await sleep(1000);
     }
   } catch (error) {
-    message(error.status === 409 ? 'Phòng đã có một người xem.' : error.status === 403 ? 'Sai mật khẩu phòng.' : error.message);
+    if (error.status === 403) {
+      $('join').hidden = false;
+      badge('CẦN MẬT KHẨU');
+      message('Phòng này yêu cầu mật khẩu. Vui lòng nhập mật khẩu và bấm Kết nối.');
+    } else if (error.status === 409) {
+      badge('PHÒNG ĐẦY');
+      message('Phòng đã đủ 4 người xem.');
+    } else {
+      badge('LỖI');
+      message(error.message || 'Không thể kết nối phòng.');
+    }
   }
+}
+
+$('join').addEventListener('submit', async e => {
+  e.preventDefault();
+  await connectWithPassword($('password').value);
 });
 
-$('stop').onclick = () => { stop(); message('Đã dừng xem'); };
-video.onclick = () => video.play().catch(() => {});
+$('stop').onclick = () => {
+  stop();
+};
+
+video.onclick = () => {
+  video.play().catch(() => {});
+  if ($('tapToPlay')) $('tapToPlay').hidden = true;
+};
+
+video.onplaying = () => {
+  if ($('tapToPlay')) $('tapToPlay').hidden = true;
+  video.hidden = false;
+  if ($('placeholder')) $('placeholder').hidden = true;
+  badge('TRỰC TIẾP');
+  message('Đang xem video trực tiếp (Cloudflare Realtime 1TB)');
+};
+
+if ($('tapToPlay')) {
+  $('tapToPlay').onclick = () => {
+    video.play().catch(() => {});
+    $('tapToPlay').hidden = true;
+  };
+}
 
 $('fullscreen').onclick = () => {
   if ($('stage').requestFullscreen) $('stage').requestFullscreen().catch(() => {});
@@ -212,11 +370,14 @@ function updateRoomState() {
   const p = getPieces();
   if (p) {
     currentPieces = p;
-    $('join').hidden = false;
-    message('Phòng đã sẵn sàng. Nhập mật khẩu (nếu có) và bấm Kết nối.');
+    badge('SẴN SÀNG');
+    message('Đang tự động kết nối vào phòng...');
+    // Auto-connect with saved or empty password
+    connectWithPassword($('password') ? $('password').value : '');
   } else {
     currentPieces = null;
     $('join').hidden = true;
+    badge('CHỜ LINK');
     message('Vui lòng mở đúng liên kết phòng do người phát cung cấp.');
   }
 }
