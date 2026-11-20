@@ -230,7 +230,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       if (!process.env.ICE_SERVERS_JSON) return undefined;
       try {
         const raw = JSON.parse(process.env.ICE_SERVERS_JSON);
-        return JSON.stringify(raw).includes('openrelay.metered.ca') ? undefined : raw;
+        if (JSON.stringify(raw).includes('metered.ca') || JSON.stringify(raw).includes('openrelay')) return undefined;
+        return raw;
       } catch { return undefined; }
     })(),
     turnURLs: process.env.TURN_URLS?.split(',').filter(Boolean),
