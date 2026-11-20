@@ -35,6 +35,7 @@ final class AppModel: ObservableObject {
     @Published var message = ""
     @Published var working = false
     @Published var status = "Chưa phát"
+    @Published var isPublisherLive = false
     @Published var pairing = ""
     
     static let calibratedCrop = Crop(x: 0.055, y: 0.002, width: 0.144, height: 0.311, referenceAspect: 2.165, rotate180: true, version: 3)
@@ -110,14 +111,13 @@ final class AppModel: ObservableObject {
               let v = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
         let viewers = v["viewers"] as? Int ?? 0, live = v["liveViewers"] as? Int ?? 0
         let pubOnline = v["publisherOnline"] as? Bool ?? false
+        self.isPublisherLive = pubOnline
         if live > 0 {
             status = "Đang phát trực tiếp • \(live)/4 người xem"
         } else if pubOnline {
-            status = viewers > 0 ? "Đang truyền tín hiệu • \(viewers)/4 người xem" : "Máy phát online • Đang chờ người xem"
-        } else if v["paired"] as? Bool == true {
-            status = viewers > 0 ? "Đã ghép nối • Đang chờ người xem (\(viewers)/4)" : "Đã ghép nối • Chờ người xem mở link"
+            status = viewers > 0 ? "Đang truyền hình ảnh • \(viewers)/4 người xem" : "Máy phát online • Chờ người xem"
         } else {
-            status = "Chờ bật Ma Giáo Live Map Broadcast"
+            status = viewers > 0 ? "⚠️ CHƯA BẬT PHÁT • Có \(viewers) người đang chờ xem" : "⚠️ CHƯA BẬT PHÁT • Chạm nút tròn để phát"
         }
     }
 
@@ -215,9 +215,9 @@ final class AppModel: ObservableObject {
             let (_, response) = try await URLSession.shared.data(for: req)
             let code = (response as? HTTPURLResponse)?.statusCode
             guard code == 204 || code == 404 else { throw failure("Máy chủ chưa xác nhận đóng phòng") }
-            room = nil; pairing = ""; message = "Đã dừng phát và đóng phòng thành công."
+            room = nil; pairing = ""; isPublisherLive = false; message = "Đã dừng phát và đóng phòng thành công."
         } catch {
-            room = nil; pairing = ""
+            room = nil; pairing = ""; isPublisherLive = false
             message = "Đã dừng phát. Nếu còn biểu tượng ghi màn hình đỏ trên iPhone, hãy bấm dừng."
         }
     }
@@ -433,48 +433,56 @@ struct ContentView: View {
                                 .tint(Studio.aqua)
                             }
                             
+                            // Trạng thái phát sóng thời gian thực
                             HStack(spacing: 10) {
-                                ShareLink(item: url) {
-                                    Label("Gửi link", systemImage: "square.and.arrow.up")
-                                        .font(.subheadline.bold())
-                                        .frame(maxWidth: .infinity)
-                                        .frame(height: 50)
-                                }
-                                .buttonStyle(.borderedProminent)
-                                .tint(Studio.aqua)
-                                .foregroundStyle(.black)
-                                
-                                BigBroadcastButton()
-                                    .frame(maxWidth: .infinity)
-                                    .frame(height: 50)
-                            }
-                            
-                            VStack(alignment: .leading, spacing: 6) {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "info.circle.fill").foregroundStyle(.yellow)
-                                    Text("Cách phát mini-map:").font(.caption.bold()).foregroundStyle(.yellow)
-                                }
-                                Text("1. Bấm nút BẬT PHÁT ở trên.").font(.caption2.bold()).foregroundStyle(.white)
-                                Text("2. Chọn đúng dòng \"Live - Ma Giáo AOV\" rồi bấm Bắt đầu truyền phát.").font(.caption2.bold()).foregroundStyle(.white)
-                                Text("3. Mở game Liên Quân vào trận bình thường, radar tự lên hình.").font(.caption2).foregroundStyle(.white.opacity(0.85))
-                            }
-                            .padding(12)
-                            .background(Color.yellow.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
-                            
-                            // Trạng thái người xem
-                            HStack(spacing: 10) {
-                                Circle().fill(Studio.aqua).frame(width: 8, height: 8)
+                                Circle()
+                                    .fill(model.isPublisherLive ? Color.green : Color.orange)
+                                    .frame(width: 10, height: 10)
                                 Text(model.status)
                                     .font(.subheadline.bold())
-                                    .foregroundStyle(Studio.aqua)
+                                    .foregroundStyle(model.isPublisherLive ? Color.green : Color.orange)
                                     .lineLimit(1)
                                     .minimumScaleFactor(0.8)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 14)
                             .frame(height: 44)
-                            .background(Studio.aqua.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
-                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Studio.aqua.opacity(0.25), lineWidth: 1))
+                            .background(
+                                (model.isPublisherLive ? Color.green : Color.orange).opacity(0.12),
+                                in: RoundedRectangle(cornerRadius: 12)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke((model.isPublisherLive ? Color.green : Color.orange).opacity(0.3), lineWidth: 1)
+                            )
+                            
+                            // Nút Bật phát ReplayKit trực tiếp
+                            BroadcastButtonRow()
+                                .frame(height: 56)
+                                .shadow(color: Color.blue.opacity(0.3), radius: 6, y: 3)
+                            
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
+                                    Text("BẮT BUỘC ĐỂ LÊN HÌNH TRÊN MÁY TÍNH:").font(.caption.bold()).foregroundStyle(.yellow)
+                                }
+                                Text("1. Chạm vào nút tròn ở thanh màu xanh bên trên.").font(.caption2.bold()).foregroundStyle(.white)
+                                Text("2. Chọn đúng dòng \"Live - Ma Giáo AOV\" rồi bấm \"Bắt đầu truyền phát\".").font(.caption2.bold()).foregroundStyle(.white)
+                                Text("3. Khi có chấm đỏ ghi màn hình trên góc iPhone và trạng thái chuyển sang XANH LÁ CÂY thì vào game Liên Quân chiến bình thường!").font(.caption2).foregroundStyle(.white.opacity(0.9))
+                            }
+                            .padding(12)
+                            .background(Color.yellow.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+                            
+                            // Gửi link người xem
+                            ShareLink(item: url) {
+                                Label("Gửi link phòng cho đồng đội", systemImage: "square.and.arrow.up")
+                                    .font(.subheadline.bold())
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 48)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(Studio.aqua)
+                            .foregroundStyle(.black)
                             
                             // Nút DỪNG PHÁT lớn, nổi bật màu đỏ
                             Button(role: .destructive) {
@@ -487,7 +495,7 @@ struct ContentView: View {
                                         .font(.system(size: 17, weight: .bold, design: .rounded))
                                 }
                                 .frame(maxWidth: .infinity)
-                                .frame(height: 52)
+                                .frame(height: 50)
                                 .foregroundStyle(.white)
                                 .background(
                                     LinearGradient(
@@ -624,11 +632,11 @@ struct CropEditor: View {
     }
 }
 
-final class BigBroadcastButtonView: UIView {
+final class BroadcastButtonRowView: UIView {
     let picker = RPSystemBroadcastPickerView()
-    private let label = UILabel()
-    private let icon = UIImageView()
-    private let stack = UIStackView()
+    private let titleLabel = UILabel()
+    private let subLabel = UILabel()
+    private let textStack = UIStackView()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -640,107 +648,83 @@ final class BigBroadcastButtonView: UIView {
     }
 
     private func setup() {
-        backgroundColor = UIColor(red: 0.1, green: 0.5, blue: 0.95, alpha: 1.0)
-        layer.cornerRadius = 12
+        backgroundColor = UIColor(red: 0.08, green: 0.48, blue: 0.95, alpha: 1.0)
+        layer.cornerRadius = 14
         clipsToBounds = true
 
-        icon.image = UIImage(systemName: "record.circle.fill")
-        icon.tintColor = .white
-        icon.contentMode = .scaleAspectFit
-        icon.translatesAutoresizingMaskIntoConstraints = false
-        icon.isUserInteractionEnabled = false
+        titleLabel.text = "BẬT PHÁT MINI-MAP"
+        titleLabel.textColor = .white
+        titleLabel.font = .systemFont(ofSize: 15, weight: .bold)
 
-        label.text = "BẬT PHÁT"
-        label.textColor = .white
-        label.font = .systemFont(ofSize: 15, weight: .bold)
-        label.translatesAutoresizingMaskIntoConstraints = false
-        label.isUserInteractionEnabled = false
+        subLabel.text = "Chạm nút tròn bên phải để bật quay"
+        subLabel.textColor = UIColor.white.withAlphaComponent(0.85)
+        subLabel.font = .systemFont(ofSize: 12)
 
-        stack.axis = .horizontal
-        stack.spacing = 8
-        stack.alignment = .center
-        stack.isUserInteractionEnabled = false
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        stack.addArrangedSubview(icon)
-        stack.addArrangedSubview(label)
-        addSubview(stack)
+        textStack.axis = .vertical
+        textStack.spacing = 3
+        textStack.translatesAutoresizingMaskIntoConstraints = false
+        textStack.isUserInteractionEnabled = false
+        textStack.addArrangedSubview(titleLabel)
+        textStack.addArrangedSubview(subLabel)
+        addSubview(textStack)
 
-        NSLayoutConstraint.activate([
-            stack.centerXAnchor.constraint(equalTo: centerXAnchor),
-            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
-            icon.widthAnchor.constraint(equalToConstant: 20),
-            icon.heightAnchor.constraint(equalToConstant: 20)
-        ])
-
-        let bundleID = Bundle.main.bundleIdentifier ?? "vn.nguyenban.nbwebmap"
-        picker.preferredExtension = bundleID + ".Broadcast"
         picker.showsMicrophoneButton = false
-        picker.backgroundColor = .clear
-        picker.alpha = 1.0
+        picker.preferredExtension = nil
+        picker.translatesAutoresizingMaskIntoConstraints = false
         addSubview(picker)
 
-        cleanButtonImages()
+        NSLayoutConstraint.activate([
+            textStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            textStack.centerYAnchor.constraint(equalTo: centerYAnchor),
+            textStack.trailingAnchor.constraint(lessThanOrEqualTo: picker.leadingAnchor, constant: -10),
 
-        let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap))
-        tap.cancelsTouchesInView = false
+            picker.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            picker.centerYAnchor.constraint(equalTo: centerYAnchor),
+            picker.widthAnchor.constraint(equalToConstant: 48),
+            picker.heightAnchor.constraint(equalToConstant: 48)
+        ])
+
+        let tap = UITapGestureRecognizer(target: self, action: #selector(handleRowTap))
         addGestureRecognizer(tap)
     }
 
-    @objc private func handleTap() {
-        for sub in picker.subviews {
-            if let btn = sub as? UIButton {
-                btn.sendActions(for: .allEvents)
+    @objc private func handleRowTap(_ gesture: UITapGestureRecognizer) {
+        let loc = gesture.location(in: picker)
+        if !picker.bounds.contains(loc) {
+            if let btn = findButton(in: picker) {
+                btn.sendActions(for: .touchUpInside)
             }
         }
     }
 
-    private func cleanButtonImages() {
-        for sub in picker.subviews {
-            if let btn = sub as? UIButton {
-                btn.setImage(nil, for: .normal)
-                btn.setImage(nil, for: .highlighted)
-                btn.setImage(nil, for: .selected)
-                btn.backgroundColor = .clear
-                btn.tintColor = .clear
-            }
+    private func findButton(in v: UIView) -> UIButton? {
+        if let b = v as? UIButton { return b }
+        for sub in v.subviews {
+            if let b = findButton(in: sub) { return b }
         }
+        return nil
     }
+}
 
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        picker.frame = bounds
-        for sub in picker.subviews {
-            if let btn = sub as? UIButton {
-                btn.frame = bounds
-                btn.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-                btn.setImage(nil, for: .normal)
-                btn.setImage(nil, for: .highlighted)
-                btn.setImage(nil, for: .selected)
-                btn.backgroundColor = .clear
-                btn.tintColor = .clear
-            }
-        }
+struct BroadcastButtonRow: UIViewRepresentable {
+    func makeUIView(context: Context) -> BroadcastButtonRowView {
+        BroadcastButtonRowView()
     }
+    func updateUIView(_ uiView: BroadcastButtonRowView, context: Context) {}
 }
 
 struct BigBroadcastButton: UIViewRepresentable {
-    func makeUIView(context: Context) -> BigBroadcastButtonView {
-        BigBroadcastButtonView()
+    func makeUIView(context: Context) -> BroadcastButtonRowView {
+        BroadcastButtonRowView()
     }
-    func updateUIView(_ uiView: BigBroadcastButtonView, context: Context) {
-        let bundleID = Bundle.main.bundleIdentifier ?? "vn.nguyenban.nbwebmap"
-        uiView.picker.preferredExtension = bundleID + ".Broadcast"
-    }
+    func updateUIView(_ uiView: BroadcastButtonRowView, context: Context) {}
 }
 
 struct BroadcastButton: UIViewRepresentable {
-    func makeUIView(context: Context) -> BigBroadcastButtonView {
-        BigBroadcastButtonView()
+    func makeUIView(context: Context) -> BroadcastButtonRowView {
+        BroadcastButtonRowView()
     }
-    func updateUIView(_ uiView: BigBroadcastButtonView, context: Context) {
-        let bundleID = Bundle.main.bundleIdentifier ?? "vn.nguyenban.nbwebmap"
-        uiView.picker.preferredExtension = bundleID + ".Broadcast"
-    }
+    func updateUIView(_ uiView: BroadcastButtonRowView, context: Context) {}
 }
 
 struct QRSheet: View {

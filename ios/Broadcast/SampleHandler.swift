@@ -3,7 +3,8 @@ import CoreImage
 import ImageIO
 import WebRTC
 
-final class SampleHandler: RPBroadcastSampleHandler {
+@objc(SampleHandler)
+public class SampleHandler: RPBroadcastSampleHandler {
     private let context = CIContext(options: [.cacheIntermediates: false])
     private let lock = NSLock()
     private var active = false
@@ -34,10 +35,10 @@ final class SampleHandler: RPBroadcastSampleHandler {
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try? JSONSerialization.data(withJSONObject: ["source": "EXTENSION", "msg": text])
-        session.dataTask(with: req).resume()
+        URLSession.shared.dataTask(with: req).resume()
     }
 
-    override func broadcastStarted(withSetupInfo setupInfo: [String: NSObject]?) {
+    override public func broadcastStarted(withSetupInfo setupInfo: [String: NSObject]?) {
         startedAt = ProcessInfo.processInfo.systemUptime
         lock.lock(); active = true; lock.unlock()
         remoteLog("broadcastStarted() launched!")
@@ -165,7 +166,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
         }.resume()
     }
 
-    override func processSampleBuffer(_ sampleBuffer: CMSampleBuffer, with sampleBufferType: RPSampleBufferType) {
+    override public func processSampleBuffer(_ sampleBuffer: CMSampleBuffer, with sampleBufferType: RPSampleBufferType) {
         guard sampleBufferType == .video else { return }
         lock.lock(); let c = config; let peers = self.peers; let running = active; lock.unlock()
         guard running else { return }
@@ -244,14 +245,14 @@ final class SampleHandler: RPBroadcastSampleHandler {
         peer.push(output, timeNs: Int64(now * 1_000_000_000))
     }
 
-    override func broadcastPaused() {
+    override public func broadcastPaused() {
         lock.lock(); let p = peers; lock.unlock()
         p.forEach { sendBlack($0, now: ProcessInfo.processInfo.systemUptime) }
     }
 
-    override func broadcastResumed() {}
+    override public func broadcastResumed() {}
 
-    override func broadcastFinished() {
+    override public func broadcastFinished() {
         remoteLog("broadcastFinished() called")
         syncTimer?.cancel(); syncTimer = nil
         lock.lock(); active = false; let p = peers; peers = []; config = nil; lock.unlock()
