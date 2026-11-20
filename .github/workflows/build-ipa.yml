@@ -54,6 +54,10 @@ jobs:
           test -f dist/Payload/NBWebMap.app/PlugIns/Broadcast.appex/Broadcast
           file dist/Payload/NBWebMap.app/NBWebMap | grep -q 'Mach-O'
           file dist/Payload/NBWebMap.app/PlugIns/Broadcast.appex/Broadcast | grep -q 'Mach-O'
+          if [ -d dist/Payload/NBWebMap.app/Frameworks/WebRTC.framework ]; then
+            mkdir -p dist/Payload/NBWebMap.app/PlugIns/Broadcast.appex/Frameworks
+            cp -R dist/Payload/NBWebMap.app/Frameworks/WebRTC.framework dist/Payload/NBWebMap.app/PlugIns/Broadcast.appex/Frameworks/
+          fi
           cp ios/App/App.entitlements dist/App.entitlements
           cp ios/Broadcast/Broadcast.entitlements dist/Broadcast.entitlements
           cp SIGNING.txt dist/

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>👑 LIVE MAP AOV ⚡ IBO HUD VIP</title>
+  <title>👑 LIVE MAP AOV ⚡ RADAR VIP</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800;900&family=Orbitron:wght@600;700;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
@@ -34,12 +34,11 @@
           <span class="user-handle">Ma Giáo AOV</span>
           <span class="eyebrow-divider">|</span>
           <span class="pulse-indicator"></span>
-          <span class="eyebrow-tag">IBO RADAR VIP</span>
+          <span class="eyebrow-tag">RADAR VIP</span>
         </div>
-        <p class="subtitle">Hệ thống truyền hình ảnh góc nhìn Mini-Map thời gian thực</p>
       </div>
       <div class="header-status-area">
-        <a href="https://bio-magiao-aov.vercel.app/" target="_blank" rel="noopener noreferrer" class="btn-back-bio" title="👑 MA GIÁO AOV ⚡ Bio Link Game VIP">
+        <a href="https://bio-magiao-aov.vercel.app/" target="_blank" rel="noopener noreferrer" class="btn-back-bio" title="Bio Link VIP">
           <i class="fa-solid fa-arrow-left"></i>
           <span>👑 Bio VIP</span>
         </a>
@@ -55,18 +54,18 @@
       <div class="stage-scanline" aria-hidden="true"></div>
       <div class="stage-crosshair" aria-hidden="true"></div>
       
-      <video id="map" autoplay muted playsinline autopictureinpicture hidden aria-label="Vùng bản đồ được chia sẻ"></video>
+      <video id="map" autoplay muted playsinline autopictureinpicture hidden aria-label="Radar Mini-Map"></video>
       <button id="tapToPlay" type="button" class="btn-tap-to-play" hidden>
         <i class="fa-solid fa-play"></i>
         <span>CHẠM ĐỂ XEM BẢN ĐỒ</span>
       </button>
       <div id="placeholder">
-        <strong class="placeholder-title"><i class="fa-solid fa-satellite-dish"></i> SẴN SÀNG NHẬN TÍN HIỆU RADAR</strong>
-        <p class="placeholder-desc">Mở đúng liên kết phòng do máy phát cung cấp để xem trực tiếp.</p>
-        <a href="https://bio-magiao-aov.vercel.app/" target="_blank" rel="noopener noreferrer" class="btn-placeholder-bio">
-          <i class="fa-solid fa-arrow-left"></i>
-          <span>👑 MA GIÁO AOV ⚡ Bio Link Game VIP</span>
-        </a>
+        <div class="radar-scope-ring">
+          <div class="radar-sweep"></div>
+          <i class="fa-solid fa-satellite-dish radar-center-icon"></i>
+        </div>
+        <strong class="placeholder-title">CHỜ TÍN HIỆU RADAR</strong>
+        <p class="placeholder-desc">Chờ máy phát vào trận và bật phát...</p>
       </div>
     </section>
 
@@ -76,27 +75,26 @@
           <span class="label-text">MẬT KHẨU PHÒNG (NẾU CÓ)</span>
           <div class="input-wrap">
             <span class="input-icon" aria-hidden="true">🔑</span>
-            <input id="password" type="password" maxlength="128" autocomplete="current-password" placeholder="Nhập mật khẩu do máy phát cung cấp...">
+            <input id="password" type="password" maxlength="128" autocomplete="current-password" placeholder="Nhập mật khẩu nếu phòng yêu cầu...">
           </div>
         </label>
       </div>
       <button class="join-button" type="submit">
-        <span class="btn-label">⚡ KẾT NỐI PHÒNG</span>
+        <span class="btn-label">⚡ KẾT NỐI</span>
       </button>
     </form>
 
     <footer>
       <div class="viewer-actions">
-        <button id="pip" class="pip" type="button"><span class="icon-pip" aria-hidden="true">▣</span>Cửa sổ PiP</button>
-        <button id="stop" class="stop" type="button"><span aria-hidden="true">■</span>Dừng xem</button>
+        <button id="pip" class="pip" type="button"><i class="fa-regular fa-window-restore"></i> PiP</button>
+        <button id="stop" class="stop" type="button"><i class="fa-solid fa-stop"></i> Dừng</button>
       </div>
-      <p id="status" role="status"><b>WebRTC Bảo Mật</b> · Đang chờ kết nối phòng</p>
-      <button id="fullscreen" class="fullscreen" type="button"><span aria-hidden="true">⛶</span>Toàn màn hình</button>
+      <p id="status" role="status">Chờ kết nối...</p>
+      <button id="fullscreen" class="fullscreen" type="button"><i class="fa-solid fa-expand"></i> Toàn màn hình</button>
     </footer>
 
-    <p id="metrics" class="metrics"></p>
+    <p id="metrics" class="metrics">0 FPS · Ping --</p>
 
-    <!-- KÊNH MẠNG XÃ HỘI (TINH GỌN THEO IBO) -->
     <div class="section-tag">
       <i class="fa-solid fa-fire"></i> KÊNH MẠNG XÃ HỘI
     </div>
@@ -114,12 +112,8 @@
         <span>Telegram</span>
       </a>
     </nav>
-    <div class="info-strip">
-      <span>Tối đa 4 người xem</span>
-      <span>Mật khẩu phòng</span>
-      <span>Không lưu video</span>
-      <span>IBO Engine</span>
-      <span class="brand-tag">Live Map AOV</span>
+    <div class="brand-footer-text">
+      <span>Ma Giáo AOV</span> · <span>Live Radar VIP</span>
     </div>
   </main>
   <script src="/viewer.js"></script>

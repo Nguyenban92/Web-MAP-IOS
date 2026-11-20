@@ -1,0 +1,24 @@
+================================================================================
+           DANH SÁCH MÃ KEY TẠO PHÒNG CHO THÀNH VIÊN (LIVE MAP AOV)
+================================================================================
+
+Mỗi thành viên dùng 1 Key riêng biệt để tạo phòng trên máy của họ.
+Các phòng chạy hoàn toàn độc lập, không ai đụng ai (tối đa 25 phòng cùng lúc).
+
+--------------------------------------------------------------------------------
+1. DANH SÁCH GỬI CHO TỪNG THÀNH VIÊN:
+--------------------------------------------------------------------------------
+- Thành viên 1: MG-FvEw0o7qt-STgTZOUbWvbNpS
+- Thành viên 2: MG-pCt01szwS-HXUo8BjvSiSUWx
+- Thành viên 3: MG-PbQ2wT7-se96T-4Kg2zS4t_q
+- Thành viên 4: MG-luDfck_dydVA8TobYlEPH7i2
+- Thành viên 5: MG-Z0yF9CgrvfThBAfZhy6A_mGV
+
+--------------------------------------------------------------------------------
+2. CHUỖI CẤU HÌNH BIẾN MÔI TRƯỜNG TRÊN RENDER (PUBLISHER_KEYS):
+--------------------------------------------------------------------------------
+Key: PUBLISHER_KEYS
+Value:
+thanhvien1=MG-FvEw0o7qt-STgTZOUbWvbNpS;thanhvien2=MG-pCt01szwS-HXUo8BjvSiSUWx;thanhvien3=MG-PbQ2wT7-se96T-4Kg2zS4t_q;thanhvien4=MG-luDfck_dydVA8TobYlEPH7i2;thanhvien5=MG-Z0yF9CgrvfThBAfZhy6A_mGV
+
+================================================================================

@@ -444,31 +444,19 @@ struct ContentView: View {
                                 .tint(Studio.aqua)
                                 .foregroundStyle(.black)
                                 
-                                ZStack {
-                                    HStack(spacing: 8) {
-                                        Image(systemName: "record.circle.fill")
-                                            .font(.body.bold())
-                                            .foregroundStyle(.white)
-                                        Text("BẬT PHÁT")
-                                            .font(.subheadline.bold())
-                                            .foregroundStyle(.white)
-                                    }
-                                    BroadcastButton()
-                                        .opacity(0.015)
-                                }
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 50)
-                                .background(Color(red: 0.1, green: 0.5, blue: 0.95), in: RoundedRectangle(cornerRadius: 12))
+                                BigBroadcastButton()
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 50)
                             }
                             
                             VStack(alignment: .leading, spacing: 6) {
                                 HStack(spacing: 6) {
-                                    Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.yellow)
-                                    Text("LƯU Ý QUAN TRỌNG KHI BẬT PHÁT:").font(.caption.bold()).foregroundStyle(.yellow)
+                                    Image(systemName: "info.circle.fill").foregroundStyle(.yellow)
+                                    Text("Cách phát mini-map:").font(.caption.bold()).foregroundStyle(.yellow)
                                 }
                                 Text("1. Bấm nút BẬT PHÁT ở trên.").font(.caption2.bold()).foregroundStyle(.white)
-                                Text("2. Trong hộp thoại hiện lên, CHỌN ĐÚNG dòng 'Live - Ma Giáo AOV' (không chọn 'Cuộn camera') rồi bấm 'Bắt đầu truyền phát'.").font(.caption2.bold()).foregroundStyle(.white)
-                                Text("3. Mở game Liên Quân chơi bình thường, mini-map tự động truyền đến người xem.").font(.caption2).foregroundStyle(.secondary)
+                                Text("2. Chọn đúng dòng \"Live - Ma Giáo AOV\" rồi bấm Bắt đầu truyền phát.").font(.caption2.bold()).foregroundStyle(.white)
+                                Text("3. Mở game Liên Quân vào trận bình thường, radar tự lên hình.").font(.caption2).foregroundStyle(.white.opacity(0.85))
                             }
                             .padding(12)
                             .background(Color.yellow.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
@@ -636,8 +624,12 @@ struct CropEditor: View {
     }
 }
 
-final class BroadcastPickerContainer: UIView {
+final class BigBroadcastButtonView: UIView {
     let picker = RPSystemBroadcastPickerView()
+    private let label = UILabel()
+    private let icon = UIImageView()
+    private let stack = UIStackView()
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         setup()
@@ -646,12 +638,74 @@ final class BroadcastPickerContainer: UIView {
         super.init(coder: coder)
         setup()
     }
+
     private func setup() {
+        backgroundColor = UIColor(red: 0.1, green: 0.5, blue: 0.95, alpha: 1.0)
+        layer.cornerRadius = 12
+        clipsToBounds = true
+
+        icon.image = UIImage(systemName: "record.circle.fill")
+        icon.tintColor = .white
+        icon.contentMode = .scaleAspectFit
+        icon.translatesAutoresizingMaskIntoConstraints = false
+        icon.isUserInteractionEnabled = false
+
+        label.text = "BẬT PHÁT"
+        label.textColor = .white
+        label.font = .systemFont(ofSize: 15, weight: .bold)
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.isUserInteractionEnabled = false
+
+        stack.axis = .horizontal
+        stack.spacing = 8
+        stack.alignment = .center
+        stack.isUserInteractionEnabled = false
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        stack.addArrangedSubview(icon)
+        stack.addArrangedSubview(label)
+        addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            stack.centerXAnchor.constraint(equalTo: centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
+            icon.widthAnchor.constraint(equalToConstant: 20),
+            icon.heightAnchor.constraint(equalToConstant: 20)
+        ])
+
         let bundleID = Bundle.main.bundleIdentifier ?? "vn.nguyenban.nbwebmap"
         picker.preferredExtension = bundleID + ".Broadcast"
         picker.showsMicrophoneButton = false
+        picker.backgroundColor = .clear
+        picker.alpha = 1.0
         addSubview(picker)
+
+        cleanButtonImages()
+
+        let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap))
+        tap.cancelsTouchesInView = false
+        addGestureRecognizer(tap)
     }
+
+    @objc private func handleTap() {
+        for sub in picker.subviews {
+            if let btn = sub as? UIButton {
+                btn.sendActions(for: .allEvents)
+            }
+        }
+    }
+
+    private func cleanButtonImages() {
+        for sub in picker.subviews {
+            if let btn = sub as? UIButton {
+                btn.setImage(nil, for: .normal)
+                btn.setImage(nil, for: .highlighted)
+                btn.setImage(nil, for: .selected)
+                btn.backgroundColor = .clear
+                btn.tintColor = .clear
+            }
+        }
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
         picker.frame = bounds
@@ -659,23 +713,33 @@ final class BroadcastPickerContainer: UIView {
             if let btn = sub as? UIButton {
                 btn.frame = bounds
                 btn.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+                btn.setImage(nil, for: .normal)
+                btn.setImage(nil, for: .highlighted)
+                btn.setImage(nil, for: .selected)
+                btn.backgroundColor = .clear
+                btn.tintColor = .clear
             }
         }
     }
 }
 
-struct BroadcastButton: UIViewRepresentable {
-    func makeUIView(context: Context) -> BroadcastPickerContainer {
-        BroadcastPickerContainer()
+struct BigBroadcastButton: UIViewRepresentable {
+    func makeUIView(context: Context) -> BigBroadcastButtonView {
+        BigBroadcastButtonView()
     }
-    func updateUIView(_ uiView: BroadcastPickerContainer, context: Context) {
+    func updateUIView(_ uiView: BigBroadcastButtonView, context: Context) {
         let bundleID = Bundle.main.bundleIdentifier ?? "vn.nguyenban.nbwebmap"
         uiView.picker.preferredExtension = bundleID + ".Broadcast"
-        for sub in uiView.picker.subviews {
-            if let btn = sub as? UIButton {
-                btn.frame = uiView.bounds
-            }
-        }
+    }
+}
+
+struct BroadcastButton: UIViewRepresentable {
+    func makeUIView(context: Context) -> BigBroadcastButtonView {
+        BigBroadcastButtonView()
+    }
+    func updateUIView(_ uiView: BigBroadcastButtonView, context: Context) {
+        let bundleID = Bundle.main.bundleIdentifier ?? "vn.nguyenban.nbwebmap"
+        uiView.picker.preferredExtension = bundleID + ".Broadcast"
     }
 }
 
