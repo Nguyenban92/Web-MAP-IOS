@@ -65,7 +65,7 @@ export function createRTC({ now, fail, limited, iceServers = DEFAULT_ICE_SERVERS
   if(Boolean(turnSecret)!==Boolean(turnURLs.length)||!turnURLs.every(u=>typeof u==='string'&&/^turns?:/.test(u)))throw new Error('TURN_URLS and TURN_SECRET must be configured together');
   const isDefaultICE = iceServers === DEFAULT_ICE_SERVERS;
   const fresh=()=>({epoch:0,viewer:null,viewerName:null,viewerAt:0,publisherAt:0,offer:null,answer:null,publisherCandidates:[],viewerCandidates:[]});
-  const reset=r=>{r.epoch++;r.offer=null;r.answer=null;r.publisherCandidates=[];r.viewerCandidates=[];r.viewerName=null;};
+  const reset=r=>{r.epoch++;r.offer=null;r.answer=null;r.publisherCandidates=[];r.viewerCandidates=[];};
   const ice=(id,slot)=>{
     if (isDefaultICE && (!lastCloudflareFetch || Date.now() - lastCloudflareFetch > 12 * 3600 * 1000)) {
       refreshCloudflareCredentials(fetchImpl).catch(() => {});
@@ -80,7 +80,7 @@ export function createRTC({ now, fail, limited, iceServers = DEFAULT_ICE_SERVERS
   };
   function select(room,key,publisher,requested,joining){
     room.rtcSlots||=Array.from({length:maxViewers},fresh);room.viewerSlots||=new Map();
-    room.rtcSlots.forEach(r=>{if(r.viewer&&now()-r.viewerAt>25000){room.viewerSlots.delete(r.viewer);r.viewer=null;reset(r);}});
+    room.rtcSlots.forEach(r=>{if(r.viewer&&now()-r.viewerAt>25000){room.viewerSlots.delete(r.viewer);r.viewer=null;r.viewerName=null;reset(r);}});
     let slot=publisher && (requested===undefined||requested===null) ? 0 : Number(requested);
     if(!publisher){const assigned=room.viewerSlots.get(key);if(assigned!==undefined)slot=assigned;else if(joining){slot=room.rtcSlots.findIndex(r=>!r.viewer);if(slot<0)throw fail(409,'Room already has six viewers');room.viewerSlots.set(key,slot);}else throw fail(409,'Join first');}
     if(!Number.isInteger(slot)||slot<0||slot>=maxViewers)throw fail(400,'Invalid viewer slot');return{r:room.rtcSlots[slot],slot};
@@ -98,6 +98,11 @@ export function createRTC({ now, fail, limited, iceServers = DEFAULT_ICE_SERVERS
         else if(!r.viewerName)r.viewerName='Đồng đội '+(slot+1);
       }
       else if(op==='leave'&&!publisher){if(r.viewer===key){r.viewer=null;r.viewerName=null;room.viewerSlots.delete(key);reset(r);}return{closed:true,slot};}
+      else if(op==='rename'&&!publisher){
+        if(r.viewer!==key)throw fail(409,'Join first');
+        if(typeof input.name==='string'&&input.name.trim())r.viewerName=input.name.trim().slice(0,20);
+        return{ok:true,name:r.viewerName,slot};
+      }
       else{if(!publisher&&r.viewer!==key)throw fail(409,'Join first');if(op==='reset'&&publisher){limited(`reset:${id}:${slot}`,12,60000);reset(r);}else{
         if(!Number.isSafeInteger(input.epoch)||input.epoch!==r.epoch)throw fail(409,'Stale generation');
         if(op==='offer'||op==='answer'){if((op==='offer')!==publisher)throw fail(403,'Wrong role');if(!r.viewer)throw fail(409,'No viewer');if(typeof input.sdp!=='string'||input.sdp.length>65536||!input.sdp.startsWith('v=0'))throw fail(400,'Invalid SDP');if(op==='answer'&&!r.offer)throw fail(409,'Offer first');if(r[op]&&r[op]!==input.sdp)throw fail(409,'Description already set');r[op]=input.sdp;}

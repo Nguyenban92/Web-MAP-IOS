@@ -281,7 +281,7 @@ function updateViewerHUD(state) {
           myViewerName = trimmed;
           try { localStorage.setItem('aov_viewer_name', trimmed); } catch {}
           if ($('viewerName')) $('viewerName').value = trimmed;
-          await api('rtc', { op: 'join', name: trimmed }).catch(() => {});
+          await api('rtc', { op: 'rename', name: trimmed }).catch(() => {});
         }
       };
     }
@@ -379,6 +379,11 @@ async function connectWithPassword(pwd = '', customName = '') {
 $('join').addEventListener('submit', async e => {
   e.preventDefault();
   const nameVal = $('viewerName') ? $('viewerName').value.trim() : '';
+  if (!nameVal) {
+    if ($('viewerName')) $('viewerName').focus();
+    message('Vui lòng nhập tên người xem.');
+    return;
+  }
   const pwdVal = $('password') ? $('password').value : '';
   await connectWithPassword(pwdVal, nameVal);
 });

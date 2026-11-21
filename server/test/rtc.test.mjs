@@ -25,6 +25,12 @@ test('RTC role authorization, six isolated viewers with names',()=>{
  fails(()=>call('seventh',{op:'join'}),409);
  fails(()=>call('viewer',{op:'offer',epoch:s.epoch,sdp:'v=0\r\n'}),403);
  fails(()=>call('publisher',{op:'answer',epoch:s.epoch,sdp:'v=0\r\n'}),403);
+ // Verify publisher reset does NOT wipe out viewer name
+ call('publisher', { op: 'reset' });
+ assert.equal(call().viewerList[0].name, 'Sơn');
+ // Verify viewer rename works
+ call('viewer', { op: 'rename', name: 'Sơn Pro' });
+ assert.equal(call().viewerList[0].name, 'Sơn Pro');
  assert.equal(call('other',{op:'leave'}).closed,true);assert.equal(call().viewer,true);
  call('viewer',{op:'leave'});assert.equal(call().viewer,false);
 });
