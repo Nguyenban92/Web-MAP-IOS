@@ -126,15 +126,23 @@ final class LivePeer: NSObject, RTCPeerConnectionDelegate {
             self.apply(state)
             if Date().timeIntervalSince(self.lastStats)>2 { self.lastStats=Date(); self.readStats() }
             if self.publisher, state.viewer, let peer = self.pc {
-                let broken = peer.iceConnectionState == .failed || peer.iceConnectionState == .disconnected
-                let waitingTooLong = peer.iceConnectionState != .connected && peer.iceConnectionState != .completed && Date().timeIntervalSince(self.stateStarted)>25
-                if broken || waitingTooLong {
-                    if self.badSince == nil { self.badSince=Date() }
-                    if Date().timeIntervalSince(self.badSince!)>5 && Date().timeIntervalSince(self.lastReset)>15 {
-                        self.lastReset=Date();self.badSince=nil;self.initialOperation="reset"
-                        self.report(state.relayAvailable ? "Đang thương lượng lại đường truyền…" : "P2P chưa kết nối. Mạng này có thể cần TURN; chưa có máy chủ chuyển tiếp.")
+                let iceState = peer.iceConnectionState
+                let isFailed = (iceState == .failed)
+                let isDisconnected = (iceState == .disconnected)
+                let waitingTooLong = iceState != .connected && iceState != .completed && Date().timeIntervalSince(self.stateStarted) > 30
+                
+                if isFailed || isDisconnected || waitingTooLong {
+                    if self.badSince == nil { self.badSince = Date() }
+                    let badDuration = Date().timeIntervalSince(self.badSince!)
+                    let shouldReset = (isFailed && badDuration > 8) || (isDisconnected && badDuration > 16) || (waitingTooLong && badDuration > 15)
+                    if shouldReset && Date().timeIntervalSince(self.lastReset) > 20 {
+                        self.lastReset = Date(); self.badSince = nil; self.initialOperation = "reset"
+                        self.remoteLog("LivePeer slot \(self.slot) resetting due to persistent broken connection (state: \(iceState.rawValue), bad: \(Int(badDuration))s)")
+                        self.report(state.relayAvailable ? "Đang kết nối lại đường truyền…" : "Đang thử lại kết nối…")
                     }
-                } else { self.badSince=nil }
+                } else if iceState == .connected || iceState == .completed {
+                    self.badSince = nil
+                }
             }
         }
     }

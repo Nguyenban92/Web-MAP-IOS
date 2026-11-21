@@ -21,7 +21,10 @@ async function refreshCloudflareCredentials(fetchImpl = fetch) {
     });
     const data = await res.json().catch(() => ({}));
     if (Array.isArray(data.iceServers) && data.iceServers.length > 0) {
-      dynamicCloudflareICE = data.iceServers;
+      dynamicCloudflareICE = [
+        { urls: ['stun:stun.cloudflare.com:3478', 'stun:stun.cloudflare.com:443', 'stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+        ...data.iceServers
+      ];
       lastCloudflareFetch = Date.now();
     }
   } catch {

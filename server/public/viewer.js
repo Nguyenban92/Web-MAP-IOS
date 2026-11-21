@@ -56,7 +56,7 @@ async function api(action, body, key = grant, method = body === undefined ? 'GET
   }
 }
 
-function clearPeer() {
+function clearPeer(keepLastFrame = false) {
   if (peer) {
     peer.onicecandidate = null;
     peer.ontrack = null;
@@ -65,9 +65,11 @@ function clearPeer() {
     try { peer.close(); } catch {}
   }
   peer = null;
-  video.srcObject = null;
-  video.hidden = true;
-  if ($('placeholder')) $('placeholder').hidden = false;
+  if (!keepLastFrame) {
+    video.srcObject = null;
+    video.hidden = true;
+    if ($('placeholder')) $('placeholder').hidden = false;
+  }
   if ($('tapToPlay')) $('tapToPlay').hidden = true;
   remoteReady = false;
   answerSDP = null;
@@ -159,7 +161,7 @@ function updateStatusDisplay(state) {
 
 async function apply(state, g) {
   if (state.epoch !== epoch) {
-    clearPeer();
+    clearPeer(true);
     epoch = state.epoch;
     peer = new RTCPeerConnection({ iceServers: state.iceServers, bundlePolicy: 'max-bundle' });
     const p = peer;
@@ -230,11 +232,18 @@ async function metrics() {
       latestFrames = inbound.framesDecoded;
       lastFrameAt = Date.now();
     }
-    video.hidden = false;
-    if ($('placeholder')) $('placeholder').hidden = true;
+    if (video.hidden) {
+      video.hidden = false;
+      if ($('placeholder')) $('placeholder').hidden = true;
+    }
     if ($('tapToPlay')) $('tapToPlay').hidden = true;
+    if (video.paused) {
+      video.play().catch(() => {});
+    }
   }
-  if (lastFrameAt > 0 && Date.now() - lastFrameAt > 4000) {
+  const peerConnected = peer && (peer.connectionState === 'connected' || peer.iceConnectionState === 'connected' || peer.iceConnectionState === 'completed');
+  // Only hide video if connection has been dead for > 20s AND peer is completely disconnected
+  if (lastFrameAt > 0 && Date.now() - lastFrameAt > 20000 && !peerConnected) {
     video.hidden = true;
     if ($('placeholder')) $('placeholder').hidden = false;
   }

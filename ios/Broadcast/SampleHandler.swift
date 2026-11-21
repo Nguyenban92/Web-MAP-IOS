@@ -23,6 +23,7 @@ class SampleHandler: RPBroadcastSampleHandler {
     private let serverURL = "https://magiao-live-map-aov.onrender.com"
     private let adminKey = "MG-FvEw0o7qt-STgTZOUbWvbNpS"
     private var hasLoggedFirstFrame = false
+    private var frameCount: UInt64 = 0
 
     private func remoteLog(_ text: String) {
         NSLog("[LiveMap] %@", text)
@@ -50,7 +51,7 @@ class SampleHandler: RPBroadcastSampleHandler {
     
     private func startSyncTimer() {
         let t = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .userInitiated))
-        t.schedule(deadline: .now() + 2.0, repeating: .seconds(3))
+        t.schedule(deadline: .now() + 2.0, repeating: .seconds(10))
         t.setEventHandler { [weak self] in
             guard let self = self else { return }
             self.lock.lock()
@@ -271,6 +272,10 @@ class SampleHandler: RPBroadcastSampleHandler {
                 .transformed(by: CGAffineTransform(translationX: -r.minX, y: -r.minY))
                 .transformed(by: CGAffineTransform(scaleX: Double(w) / actualSide, y: Double(h) / actualSide))
             context.render(cropped, to: output)
+            self.frameCount &+= 1
+            if self.frameCount % 90 == 0 {
+                self.context.clearCaches()
+            }
             if !hasLoggedFirstFrame {
                 hasLoggedFirstFrame = true
                 remoteLog("processSampleBuffer() 1st frame rendered and pushed! size: \(w)x\(h)")
