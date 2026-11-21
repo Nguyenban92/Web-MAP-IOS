@@ -137,7 +137,7 @@ final class LivePeer: NSObject, RTCPeerConnectionDelegate {
                     let shouldReset = (isFailed && badDuration > 8) || (isDisconnected && badDuration > 16) || (waitingTooLong && badDuration > 15)
                     if shouldReset && Date().timeIntervalSince(self.lastReset) > 20 {
                         self.lastReset = Date(); self.badSince = nil; self.initialOperation = "reset"
-                        self.remoteLog("LivePeer slot \(self.slot) resetting due to persistent broken connection (state: \(iceState.rawValue), bad: \(Int(badDuration))s)")
+                        self.remoteLog("LivePeer resetting \(self.endpoint.query ?? "slot") due to persistent broken connection (state: \(iceState.rawValue), bad: \(Int(badDuration))s)")
                         self.report(state.relayAvailable ? "Đang kết nối lại đường truyền…" : "Đang thử lại kết nối…")
                     }
                 } else if iceState == .connected || iceState == .completed {
