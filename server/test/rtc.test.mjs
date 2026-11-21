@@ -3,18 +3,26 @@ import assert from 'node:assert/strict';
 import {createHmac} from 'node:crypto';
 import {createRTC} from '../rtc.mjs';
 function setup(options={}){
- let clock=100000;const room={publishToken:'publisher',grants:new Set(['viewer','other','third','fourth','fifth'])};
+ let clock=100000;const room={publishToken:'publisher',grants:new Set(['viewer','other','third','fourth','fifth','sixth','seventh'])};
  const rtc=createRTC({now:()=>clock,fail:(status,message)=>Object.assign(new Error(message),{status}),limited:()=>{},...options});
  const call=(key='publisher',body)=>rtc(room,'room',key,body?'POST':'GET',body);
  return {call,room,advance:n=>clock+=n};
 }
 const fails=(f,status)=>assert.throws(f,e=>e.status===status);
-test('RTC role authorization, four isolated viewers',()=>{
+test('RTC role authorization, six isolated viewers with names',()=>{
  const {call}=setup();fails(()=>call('unknown'),401);fails(()=>call('viewer'),409);
- const s=call('viewer',{op:'join'});assert.equal(s.viewer,true);
- const other=call('other',{op:'join'});assert.equal(other.slot,1);assert.equal(call('other').viewer,true);
- assert.equal(call('third',{op:'join'}).slot,2);assert.equal(call('fourth',{op:'join'}).slot,3);
- fails(()=>call('fifth',{op:'join'}),409);
+ const s=call('viewer',{op:'join',name:'Sơn'});assert.equal(s.viewer,true);
+ const other=call('other',{op:'join',name:'Huy'});assert.equal(other.slot,1);assert.equal(call('other').viewer,true);
+ assert.equal(call('third',{op:'join'}).slot,2);
+ assert.equal(call('fourth',{op:'join'}).slot,3);
+ assert.equal(call('fifth',{op:'join'}).slot,4);
+ const sixth=call('sixth',{op:'join',name:'Đồng đội VIP'});assert.equal(sixth.slot,5);
+ assert.equal(call().viewers,6);
+ assert.equal(call().viewerList.length,6);
+ assert.equal(call().viewerList[0].name,'Sơn');
+ assert.equal(call().viewerList[1].name,'Huy');
+ assert.equal(call().viewerList[5].name,'Đồng đội VIP');
+ fails(()=>call('seventh',{op:'join'}),409);
  fails(()=>call('viewer',{op:'offer',epoch:s.epoch,sdp:'v=0\r\n'}),403);
  fails(()=>call('publisher',{op:'answer',epoch:s.epoch,sdp:'v=0\r\n'}),403);
  assert.equal(call('other',{op:'leave'}).closed,true);assert.equal(call().viewer,true);

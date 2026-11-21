@@ -59,13 +59,13 @@ const DEFAULT_ICE_SERVERS = [
   }
 ];
 
-export function createRTC({ now, fail, limited, iceServers = DEFAULT_ICE_SERVERS, turnURLs = [], turnSecret = '', maxViewers = 4, fetchImpl = fetch }) {
+export function createRTC({ now, fail, limited, iceServers = DEFAULT_ICE_SERVERS, turnURLs = [], turnSecret = '', maxViewers = 6, fetchImpl = fetch }) {
   if (!Array.isArray(iceServers) || !Array.isArray(turnURLs)) throw new Error('Invalid ICE configuration');
   iceServers=iceServers.map(e=>{const urls=[].concat(e.urls||[]);if(!urls.length||!urls.every(u=>typeof u==='string'&&/^(stun|stuns|turn|turns):/.test(u)))throw new Error('Invalid ICE URL');return{...e,urls};});
   if(Boolean(turnSecret)!==Boolean(turnURLs.length)||!turnURLs.every(u=>typeof u==='string'&&/^turns?:/.test(u)))throw new Error('TURN_URLS and TURN_SECRET must be configured together');
   const isDefaultICE = iceServers === DEFAULT_ICE_SERVERS;
-  const fresh=()=>({epoch:0,viewer:null,viewerAt:0,publisherAt:0,offer:null,answer:null,publisherCandidates:[],viewerCandidates:[]});
-  const reset=r=>{r.epoch++;r.offer=null;r.answer=null;r.publisherCandidates=[];r.viewerCandidates=[];};
+  const fresh=()=>({epoch:0,viewer:null,viewerName:null,viewerAt:0,publisherAt:0,offer:null,answer:null,publisherCandidates:[],viewerCandidates:[]});
+  const reset=r=>{r.epoch++;r.offer=null;r.answer=null;r.publisherCandidates=[];r.viewerCandidates=[];r.viewerName=null;};
   const ice=(id,slot)=>{
     if (isDefaultICE && (!lastCloudflareFetch || Date.now() - lastCloudflareFetch > 12 * 3600 * 1000)) {
       refreshCloudflareCredentials(fetchImpl).catch(() => {});
@@ -82,7 +82,7 @@ export function createRTC({ now, fail, limited, iceServers = DEFAULT_ICE_SERVERS
     room.rtcSlots||=Array.from({length:maxViewers},fresh);room.viewerSlots||=new Map();
     room.rtcSlots.forEach(r=>{if(r.viewer&&now()-r.viewerAt>25000){room.viewerSlots.delete(r.viewer);r.viewer=null;reset(r);}});
     let slot=publisher && (requested===undefined||requested===null) ? 0 : Number(requested);
-    if(!publisher){const assigned=room.viewerSlots.get(key);if(assigned!==undefined)slot=assigned;else if(joining){slot=room.rtcSlots.findIndex(r=>!r.viewer);if(slot<0)throw fail(409,'Room already has four viewers');room.viewerSlots.set(key,slot);}else throw fail(409,'Join first');}
+    if(!publisher){const assigned=room.viewerSlots.get(key);if(assigned!==undefined)slot=assigned;else if(joining){slot=room.rtcSlots.findIndex(r=>!r.viewer);if(slot<0)throw fail(409,'Room already has six viewers');room.viewerSlots.set(key,slot);}else throw fail(409,'Join first');}
     if(!Number.isInteger(slot)||slot<0||slot>=maxViewers)throw fail(400,'Invalid viewer slot');return{r:room.rtcSlots[slot],slot};
   }
   return function rtc(room,id,key,method,input,requestedSlot){
@@ -90,8 +90,14 @@ export function createRTC({ now, fail, limited, iceServers = DEFAULT_ICE_SERVERS
     const {r,slot}=select(room,key,publisher,requestedSlot,method==='POST'&&input?.op==='join');limited(`rtc:${id}:${slot}:${publisher?'publisher':key}`,240,60000);
     if(method==='POST'){
       if(!input||typeof input!=='object')throw fail(400,'Invalid signal');const op=input.op;
-      if(op==='join'&&!publisher){if(r.viewer&&r.viewer!==key)throw fail(409,'Viewer slot occupied');if(!r.viewer){r.viewer=key;reset(r);}r.viewerAt=now();}
-      else if(op==='leave'&&!publisher){if(r.viewer===key){r.viewer=null;room.viewerSlots.delete(key);reset(r);}return{closed:true,slot};}
+      if(op==='join'&&!publisher){
+        if(r.viewer&&r.viewer!==key)throw fail(409,'Viewer slot occupied');
+        if(!r.viewer){r.viewer=key;reset(r);}
+        r.viewerAt=now();
+        if(typeof input.name==='string'&&input.name.trim())r.viewerName=input.name.trim().slice(0,20);
+        else if(!r.viewerName)r.viewerName='Đồng đội '+(slot+1);
+      }
+      else if(op==='leave'&&!publisher){if(r.viewer===key){r.viewer=null;r.viewerName=null;room.viewerSlots.delete(key);reset(r);}return{closed:true,slot};}
       else{if(!publisher&&r.viewer!==key)throw fail(409,'Join first');if(op==='reset'&&publisher){limited(`reset:${id}:${slot}`,12,60000);reset(r);}else{
         if(!Number.isSafeInteger(input.epoch)||input.epoch!==r.epoch)throw fail(409,'Stale generation');
         if(op==='offer'||op==='answer'){if((op==='offer')!==publisher)throw fail(403,'Wrong role');if(!r.viewer)throw fail(409,'No viewer');if(typeof input.sdp!=='string'||input.sdp.length>65536||!input.sdp.startsWith('v=0'))throw fail(400,'Invalid SDP');if(op==='answer'&&!r.offer)throw fail(409,'Offer first');if(r[op]&&r[op]!==input.sdp)throw fail(409,'Description already set');r[op]=input.sdp;}
@@ -103,6 +109,8 @@ export function createRTC({ now, fail, limited, iceServers = DEFAULT_ICE_SERVERS
     const pubOnline = (r.publisherAt > 0 && now() - r.publisherAt < 15000) ||
       (Boolean(room.rtcSlots) && room.rtcSlots.some(x => x.publisherAt > 0 && now() - x.publisherAt < 15000)) ||
       (room.lastFrame > 0 && now() - room.lastFrame < 15000);
-    return{slot,epoch:r.epoch,viewer:!!r.viewer,publisherOnline:pubOnline,offer:r.offer,answer:r.answer,candidates:publisher?r.viewerCandidates:r.publisherCandidates,iceServers:activeIce,relayAvailable:!!turnSecret&&turnURLs.length>0||activeIce.some(s=>[].concat(s.urls).some(u=>/^turns?:/.test(u)))};
+    const activeViewers = (room.rtcSlots||[]).filter(x=>x.viewer&&now()-x.viewerAt<25000);
+    const viewerList = activeViewers.map(x=>({slot:(room.rtcSlots||[]).indexOf(x), name: x.viewerName||('Đồng đội '+((room.rtcSlots||[]).indexOf(x)+1))}));
+    return{slot,epoch:r.epoch,viewer:!!r.viewer,publisherOnline:pubOnline,offer:r.offer,answer:r.answer,candidates:publisher?r.viewerCandidates:r.publisherCandidates,iceServers:activeIce,relayAvailable:!!turnSecret&&turnURLs.length>0||activeIce.some(s=>[].concat(s.urls).some(u=>/^turns?:/.test(u))),viewers:activeViewers.length,maxViewers,viewerList};
   };
 }

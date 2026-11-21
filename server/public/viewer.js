@@ -20,6 +20,9 @@ let grant = '', peer = null, epoch = -1, remoteReady = false, cursor = 0, active
 let answerSDP = null;
 let signalQueue = [], sending = false, hasJoined = false;
 let reconnecting = false, connectingSince = 0;
+let mySlot = -1;
+let myViewerName = '';
+try { myViewerName = localStorage.getItem('aov_viewer_name') || ''; } catch {}
 
 const message = text => {
   const el = $('status');
@@ -80,6 +83,8 @@ function stop() {
   generation++;
   clearPeer();
   $('join').hidden = false;
+  if ($('viewerHUD')) $('viewerHUD').hidden = true;
+  mySlot = -1;
   badge('ĐÃ DỪNG');
   message('Đã dừng');
   if (grant && hasJoined) api('rtc', { op: 'leave' }).catch(() => {});
@@ -115,7 +120,8 @@ async function triggerAutoReconnect(reason) {
   await sleep(1200);
   try {
     if (active) {
-      await api('rtc', { op: 'join' });
+      const res = await api('rtc', { op: 'join', name: myViewerName });
+      if (typeof res?.slot === 'number') mySlot = res.slot;
       hasJoined = true;
     }
   } catch {}
@@ -241,7 +247,48 @@ async function metrics() {
   }
 }
 
-async function connectWithPassword(pwd = '') {
+function escapeHtml(str) {
+  return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function updateViewerHUD(state) {
+  const hud = $('viewerHUD');
+  if (!hud) return;
+  if (!active) {
+    hud.hidden = true;
+    return;
+  }
+  hud.hidden = false;
+  const count = state.viewers || 0;
+  const max = state.maxViewers || 6;
+  const countLabel = $('viewerCountLabel');
+  if (countLabel) countLabel.textContent = `${count}/${max} NGƯỜI XEM`;
+
+  const listEl = $('viewerChipList');
+  if (listEl && Array.isArray(state.viewerList)) {
+    listEl.innerHTML = state.viewerList.map(v => {
+      const isSelf = (v.slot === mySlot);
+      const title = isSelf ? ' title="Chạm để đổi tên"' : '';
+      return `<span class="viewer-chip${isSelf ? ' self' : ''}" data-slot="${v.slot}"${title}><i class="fa-solid fa-user"></i>${escapeHtml(v.name)}${isSelf ? ' (Bạn)' : ''}</span>`;
+    }).join('');
+
+    const selfChip = listEl.querySelector('.viewer-chip.self');
+    if (selfChip) {
+      selfChip.onclick = async () => {
+        const newName = prompt('Nhập tên hiển thị mới:', myViewerName);
+        if (newName && newName.trim() && newName.trim() !== myViewerName) {
+          const trimmed = newName.trim().slice(0, 20);
+          myViewerName = trimmed;
+          try { localStorage.setItem('aov_viewer_name', trimmed); } catch {}
+          if ($('viewerName')) $('viewerName').value = trimmed;
+          await api('rtc', { op: 'join', name: trimmed }).catch(() => {});
+        }
+      };
+    }
+  }
+}
+
+async function connectWithPassword(pwd = '', customName = '') {
   const p = currentPieces || getPieces();
   if (!p) {
     message('Chưa có liên kết phòng.');
@@ -256,13 +303,21 @@ async function connectWithPassword(pwd = '') {
     const access = await api('access', { password: pwd }, p[1]);
     if (g !== generation) return;
     grant = access.token;
-    await api('rtc', { op: 'join' });
+
+    const nameToSend = customName || ($('viewerName') ? $('viewerName').value.trim() : '') || myViewerName;
+    if (nameToSend) {
+      myViewerName = nameToSend;
+      try { localStorage.setItem('aov_viewer_name', nameToSend); } catch {}
+    }
+    const joinRes = await api('rtc', { op: 'join', name: nameToSend });
     if (g !== generation) return;
+    mySlot = typeof joinRes?.slot === 'number' ? joinRes.slot : -1;
     hasJoined = true;
     active = true;
     lastServer = Date.now();
     epoch = -1;
     $('join').hidden = true;
+    if ($('viewerHUD')) $('viewerHUD').hidden = false;
 
     while (active && g === generation) {
       try {
@@ -273,6 +328,7 @@ async function connectWithPassword(pwd = '') {
         await flush();
         await metrics();
         updateStatusDisplay(s);
+        updateViewerHUD(s);
 
         // Auto-reconnect if stuck in connecting > 12s without incoming video frames
         if (s.publisherOnline && peer && (peer.connectionState === 'connecting' || peer.iceConnectionState === 'checking')) {
@@ -292,7 +348,8 @@ async function connectWithPassword(pwd = '') {
           break;
         }
         if (error.status === 409) {
-          await api('rtc', { op: 'join' }).catch(() => {});
+          const res = await api('rtc', { op: 'join', name: myViewerName }).catch(() => {});
+          if (typeof res?.slot === 'number') mySlot = res.slot;
         }
         message('Đang kết nối lại...');
       }
@@ -311,7 +368,7 @@ async function connectWithPassword(pwd = '') {
       message('Phòng yêu cầu mật khẩu.');
     } else if (error.status === 409) {
       badge('PHÒNG ĐẦY');
-      message('Phòng đã đủ 4 người xem.');
+      message('Phòng đã đủ 6 người xem.');
     } else {
       badge('LỖI');
       message(error.message || 'Lỗi kết nối.');
@@ -321,7 +378,9 @@ async function connectWithPassword(pwd = '') {
 
 $('join').addEventListener('submit', async e => {
   e.preventDefault();
-  await connectWithPassword($('password').value);
+  const nameVal = $('viewerName') ? $('viewerName').value.trim() : '';
+  const pwdVal = $('password') ? $('password').value : '';
+  await connectWithPassword(pwdVal, nameVal);
 });
 
 $('stop').onclick = () => {
@@ -375,12 +434,17 @@ function updateRoomState() {
   const p = getPieces();
   if (p) {
     currentPieces = p;
-    badge('KẾT NỐI');
-    message('Đang kết nối...');
-    connectWithPassword($('password') ? $('password').value : '');
+    $('join').hidden = false;
+    if ($('viewerName')) {
+      $('viewerName').value = myViewerName;
+      if (!myViewerName) $('viewerName').focus();
+    }
+    badge('SẴN SÀNG');
+    message('Nhập tên rồi bấm Vào Phòng.');
   } else {
     currentPieces = null;
     $('join').hidden = true;
+    if ($('viewerHUD')) $('viewerHUD').hidden = true;
     badge('CHỜ LINK');
     message('Chưa có liên kết phòng.');
   }

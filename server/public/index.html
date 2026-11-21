@@ -71,18 +71,36 @@
 
     <form id="join">
       <div class="field-item">
+        <label for="viewerName">
+          <span class="label-text">TÊN NGƯỜI XEM</span>
+          <div class="input-wrap">
+            <span class="input-icon" aria-hidden="true"><i class="fa-solid fa-user"></i></span>
+            <input id="viewerName" type="text" maxlength="20" placeholder="Tên hoặc biệt danh...">
+          </div>
+        </label>
+      </div>
+      <div class="field-item">
         <label for="password">
           <span class="label-text">MẬT KHẨU</span>
           <div class="input-wrap">
-            <span class="input-icon" aria-hidden="true">🔒</span>
-            <input id="password" type="password" maxlength="128" autocomplete="current-password" placeholder="Mật khẩu phòng...">
+            <span class="input-icon" aria-hidden="true"><i class="fa-solid fa-lock"></i></span>
+            <input id="password" type="password" maxlength="128" autocomplete="current-password" placeholder="Mật khẩu (nếu có)...">
           </div>
         </label>
       </div>
       <button class="join-button" type="submit">
+        <i class="fa-solid fa-right-to-bracket"></i>
         <span class="btn-label">VÀO PHÒNG</span>
       </button>
     </form>
+
+    <div id="viewerHUD" class="viewer-hud" hidden>
+      <div class="viewer-count-tag">
+        <span class="hud-pulse"></span>
+        <span id="viewerCountLabel">0/6 NGƯỜI XEM</span>
+      </div>
+      <div id="viewerChipList" class="viewer-chips"></div>
+    </div>
 
     <footer>
       <div class="viewer-actions">

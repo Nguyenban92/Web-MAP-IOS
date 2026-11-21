@@ -156,7 +156,7 @@ class SampleHandler: RPBroadcastSampleHandler {
         remoteLog("startWithConfig() starting LivePeer for room: \(c.room.id)")
         let bitrate = Int(350000 + c.quality * 850000)
         
-        let primarySlots = [0, 1]
+        let primarySlots = [0, 1, 2, 3, 4, 5]
         self.peers = primarySlots.map { slot in
             let peer = LivePeer(server: c.server, roomID: c.room.id, credential: c.room.publishToken, publisher: true, slot: slot, fps: Int(c.fps), maxBitrate: bitrate)
             peer.onEnded = { [weak self] in

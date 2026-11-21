@@ -37,6 +37,9 @@ final class AppModel: ObservableObject {
     @Published var status = "Chưa phát"
     @Published var isPublisherLive = false
     @Published var pairing = ""
+    @Published var viewersCount: Int = 0
+    @Published var maxViewers: Int = 6
+    @Published var viewerNames: [String] = []
     
     static let calibratedCrop = Crop(x: 0.055, y: 0.002, width: 0.144, height: 0.311, referenceAspect: 2.165, rotate180: true, version: 3)
     
@@ -111,13 +114,21 @@ final class AppModel: ObservableObject {
               let v = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
         let viewers = v["viewers"] as? Int ?? 0, live = v["liveViewers"] as? Int ?? 0
         let pubOnline = v["publisherOnline"] as? Bool ?? false
+        let maxV = v["maxViewers"] as? Int ?? 6
+        self.maxViewers = maxV
+        self.viewersCount = viewers
+        if let rawList = v["viewerList"] as? [[String: Any]] {
+            self.viewerNames = rawList.compactMap { $0["name"] as? String }
+        } else {
+            self.viewerNames = []
+        }
         self.isPublisherLive = pubOnline
         if live > 0 {
-            status = "Đang phát trực tiếp • \(live)/4 người xem"
+            status = "Đang phát trực tiếp • \(live)/\(maxV) người xem"
         } else if pubOnline {
-            status = viewers > 0 ? "Đang truyền hình ảnh • \(viewers)/4 người xem" : "Đang phát sóng • Chờ người xem"
+            status = viewers > 0 ? "Đang truyền hình ảnh • \(viewers)/\(maxV) người xem" : "Đang phát sóng • Chờ người xem"
         } else {
-            status = viewers > 0 ? "Chờ máy phát • Có \(viewers) người xem" : "Chờ tín hiệu máy phát"
+            status = viewers > 0 ? "Chờ máy phát • Có \(viewers)/\(maxV) người xem" : "Chờ tín hiệu máy phát"
         }
     }
 
@@ -439,6 +450,36 @@ struct ContentView: View {
                                 (model.isPublisherLive ? Color.green : Color.orange).opacity(0.12),
                                 in: RoundedRectangle(cornerRadius: 10)
                             )
+                            
+                            // Danh sách người xem thời gian thực
+                            if !model.viewerNames.isEmpty {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "person.2.fill")
+                                        .font(.caption)
+                                        .foregroundStyle(Studio.aqua)
+                                    Text("\(model.viewersCount)/\(model.maxViewers):")
+                                        .font(.caption.bold())
+                                        .foregroundStyle(.white)
+                                    ScrollView(.horizontal, showsIndicators: false) {
+                                        HStack(spacing: 6) {
+                                            ForEach(model.viewerNames, id: \.self) { name in
+                                                Text(name)
+                                                    .font(.caption2.bold())
+                                                    .padding(.horizontal, 8)
+                                                    .padding(.vertical, 4)
+                                                    .background(Studio.aqua.opacity(0.15))
+                                                    .foregroundStyle(Studio.aqua)
+                                                    .clipShape(Capsule())
+                                                    .overlay(Capsule().stroke(Studio.aqua.opacity(0.4), lineWidth: 1))
+                                            }
+                                        }
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 12)
+                                .frame(height: 36)
+                                .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
+                            }
                             
                             // Nút Bật phát ReplayKit trực tiếp
                             BroadcastButtonRow()

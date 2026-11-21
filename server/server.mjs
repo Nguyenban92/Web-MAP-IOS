@@ -82,7 +82,7 @@ export function createApp({ adminKey, publisherKeys = '', publicURL, now = Date.
     if (!r || now() >= r.until) { r = { count: 0, until: now() + period }; rates.set(key, r); }
     if (++r.count > cap) throw fail(429, 'Too many attempts');
   }
-  const rtc = createRTC({now,fail,limited,iceServers,turnURLs,turnSecret});
+  const rtc = createRTC({now,fail,limited,iceServers,turnURLs,turnSecret,maxViewers:6});
   const server = http.createServer(async (req, res) => {
     const send = (status, value) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(value ? JSON.stringify(value) : undefined); };
     res.setHeader('Cache-Control', 'no-store');
@@ -244,8 +244,12 @@ export function createApp({ adminKey, publisherKeys = '', publicURL, now = Date.
       }
       if (action === 'status' && req.method === 'GET') {
         if (!same(bearer(req), room.publishToken)) throw fail(401, 'Unauthorized');
-        const slots=room.rtcSlots||[], viewers=slots.filter(x=>x.viewer&&now()-x.viewerAt<25000).length, live=slots.filter(x=>x.answer&&now()-x.publisherAt<15000).length;
-        send(200, { paired: !!room.paired, live: live>0, viewer: viewers>0, viewers, liveViewers:live, maxViewers:4, publisherOnline:slots.some(x=>x.publisherAt&&now()-x.publisherAt<15000) }); return;
+        const slots=room.rtcSlots||[];
+        const activeSlots=slots.filter(x=>x.viewer&&now()-x.viewerAt<25000);
+        const viewers=activeSlots.length;
+        const live=slots.filter(x=>x.answer&&now()-x.publisherAt<15000).length;
+        const viewerList=activeSlots.map(x=>({slot:slots.indexOf(x),name:x.viewerName||('Đồng đội '+(slots.indexOf(x)+1))}));
+        send(200, { paired: !!room.paired, live: live>0, viewer: viewers>0, viewers, liveViewers:live, maxViewers:6, viewerList, publisherOnline:slots.some(x=>x.publisherAt&&now()-x.publisherAt<15000) }); return;
       }
       if (action === 'pair' && req.method === 'POST') {
         if (!same(bearer(req), room.publishToken)) throw fail(401, 'Unauthorized');
