@@ -177,8 +177,10 @@ final class AppModel: ObservableObject {
             if crop.rotate180 == nil { crop.rotate180 = true }
             if crop.version == nil { crop.version = 3 }
 
+            let deviceId = UIDevice.current.identifierForVendor?.uuidString ?? "ios-app"
             let bodyDict: [String: Any] = [
                 "password": password,
+                "deviceId": deviceId,
                 "crop": [
                     "x": crop.x,
                     "y": crop.y,
@@ -195,6 +197,7 @@ final class AppModel: ObservableObject {
             request.httpMethod = "POST"
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.setValue("Bearer \(trimmedKey)", forHTTPHeaderField: "Authorization")
+            request.setValue(deviceId, forHTTPHeaderField: "X-Device-ID")
             request.httpBody = try JSONSerialization.data(withJSONObject: bodyDict)
             request.timeoutInterval = 15
             let (data, response) = try await URLSession.shared.data(for: request)

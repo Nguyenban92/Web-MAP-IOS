@@ -1,3 +1,4 @@
+import UIKit
 import ReplayKit
 import CoreImage
 import ImageIO
@@ -89,6 +90,11 @@ class SampleHandler: RPBroadcastSampleHandler {
     
     private func tryAutoPair() {
         guard !pairingBusy, config == nil, isActive() else { return }
+        if let shared = SharedStore.read(), shared.enabled, shared.crop.valid {
+            remoteLog("tryAutoPair() using SharedStore room: \(shared.room.id)")
+            self.startWithConfig(shared)
+            return
+        }
         requestServerAutoPair()
     }
 
@@ -108,6 +114,11 @@ class SampleHandler: RPBroadcastSampleHandler {
             req.httpMethod = "POST"
             req.timeoutInterval = 12
             req.setValue("Bearer \(self.adminKey)", forHTTPHeaderField: "Authorization")
+            let devId = UIDevice.current.identifierForVendor?.uuidString ?? "ios-broadcast"
+            req.setValue(devId, forHTTPHeaderField: "X-Device-ID")
+            if let shared = SharedStore.read(), shared.enabled {
+                req.setValue(shared.room.id, forHTTPHeaderField: "X-Room-ID")
+            }
             
             do {
                 let (data, response) = try await URLSession.shared.data(for: req)
@@ -136,6 +147,11 @@ class SampleHandler: RPBroadcastSampleHandler {
             req.httpMethod = "POST"
             req.timeoutInterval = 8
             req.setValue("Bearer \(self.adminKey)", forHTTPHeaderField: "Authorization")
+            let devId = UIDevice.current.identifierForVendor?.uuidString ?? "ios-broadcast"
+            req.setValue(devId, forHTTPHeaderField: "X-Device-ID")
+            if let shared = SharedStore.read(), shared.enabled {
+                req.setValue(shared.room.id, forHTTPHeaderField: "X-Room-ID")
+            }
             
             guard let (data, response) = try? await URLSession.shared.data(for: req),
                   (response as? HTTPURLResponse)?.statusCode == 200,

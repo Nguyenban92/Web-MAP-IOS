@@ -30,4 +30,16 @@ test('pairing requires publisher, validates crop, expires, single-use and revoke
  assert.ok(autoConfig.room.publishToken);
  assert.equal(autoConfig.server, 'https://map.example.com');
  assert.equal(autoConfig.enabled, true);
+
+ // Multi-device room isolation test
+ const dev1Room = await (await call('/api/rooms', 'POST', 'a'.repeat(32), { password: '', deviceId: 'iphone-A' })).json();
+ const dev2Room = await (await call('/api/rooms', 'POST', 'a'.repeat(32), { password: '', deviceId: 'iphone-B' })).json();
+ assert.notEqual(dev1Room.id, dev2Room.id);
+
+ const pairDev1 = await (await call('/api/broadcast/auto-pair', 'POST', 'a'.repeat(32), { deviceId: 'iphone-A' })).json();
+ const pairDev2 = await (await call('/api/broadcast/auto-pair', 'POST', 'a'.repeat(32), { deviceId: 'iphone-B' })).json();
+
+ assert.equal(pairDev1.room.id, dev1Room.id);
+ assert.equal(pairDev2.room.id, dev2Room.id);
+ assert.notEqual(pairDev1.room.id, pairDev2.room.id);
 });

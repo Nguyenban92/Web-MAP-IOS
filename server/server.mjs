@@ -137,6 +137,7 @@ export function createApp({ adminKey, publisherKeys = '', publicURL, now = Date.
         cleanup(); if (rooms.size >= 50) throw fail(503, 'Room limit reached');
         let input; try { input = JSON.parse((await body(req, 2048)).toString()); } catch (e) { throw e.status ? e : fail(400, 'Invalid JSON'); }
         if (typeof input?.password !== 'string' || input.password.length > 128) throw fail(400, 'Invalid password');
+        const deviceId = req.headers['x-device-id'] || input?.deviceId || null;
         const salt = randomBytes(16);
         const hash = input.password ? await derive(input.password, salt, 32) : null;
         const id = randomBytes(6).toString('hex').toUpperCase();
@@ -145,8 +146,8 @@ export function createApp({ adminKey, publisherKeys = '', publicURL, now = Date.
         const crop = input?.crop || defaultCrop;
         const fps = Number.isFinite(input?.fps) ? input.fps : 30;
         const quality = Number.isFinite(input?.quality) ? input.quality : 0.7;
-        rooms.set(id, { owner: publisher.id, publishToken, viewToken, salt, hash, created: now(), lastFrame: 0, frame: null, seq: 0, grants: new Set(), crop, fps, quality, paired: true });
-        addLog('SERVER', `[CREATE ROOM] id: ${id}, owner: ${publisher.id}`);
+        rooms.set(id, { owner: publisher.id, deviceId, publishToken, viewToken, salt, hash, created: now(), lastFrame: 0, frame: null, seq: 0, grants: new Set(), crop, fps, quality, paired: true });
+        addLog('SERVER', `[CREATE ROOM] id: ${id}, owner: ${publisher.id}, device: ${deviceId || 'none'}`);
         send(201, { id, publishToken, viewerURL: `${base.origin}/#${id}.${viewToken}` }); return;
       }
       if (path === '/api/broadcast/auto-pair' && req.method === 'POST') {
@@ -154,15 +155,46 @@ export function createApp({ adminKey, publisherKeys = '', publicURL, now = Date.
         const publisher = await publisherFor(bearer(req));
         if (!publisher) throw fail(401, 'Unauthorized');
         cleanup();
+        let input; try { input = JSON.parse((await body(req, 2048)).toString()); } catch {}
+        const clientDeviceId = req.headers['x-device-id'] || input?.deviceId || null;
+        const requestedRoomId = req.headers['x-room-id'] || input?.roomId || null;
+
         let activeRoom = null, activeId = null;
-        for (const [id, r] of rooms) {
-          if (r.owner === publisher.id && !expired(r)) {
-            if (!activeRoom || r.created > activeRoom.created) {
-              activeRoom = r;
-              activeId = id;
+
+        // 1. Exact match by requested room ID if provided
+        if (requestedRoomId && rooms.has(requestedRoomId)) {
+          const r = rooms.get(requestedRoomId);
+          if (!expired(r) && (r.owner === publisher.id || (clientDeviceId && r.deviceId === clientDeviceId))) {
+            activeRoom = r;
+            activeId = requestedRoomId;
+          }
+        }
+
+        // 2. Match by unique device ID (ensures distinct iPhones never collide)
+        if (!activeRoom && clientDeviceId) {
+          for (const [id, r] of rooms) {
+            if (r.deviceId === clientDeviceId && !expired(r)) {
+              if (!activeRoom || r.created > activeRoom.created) {
+                activeRoom = r;
+                activeId = id;
+              }
             }
           }
         }
+
+        // 3. Fallback: match by publisher.id only if neither device has a specific deviceId
+        if (!activeRoom) {
+          for (const [id, r] of rooms) {
+            const matchDevice = clientDeviceId ? (!r.deviceId || r.deviceId === clientDeviceId) : !r.deviceId;
+            if (r.owner === publisher.id && matchDevice && !expired(r)) {
+              if (!activeRoom || r.created > activeRoom.created) {
+                activeRoom = r;
+                activeId = id;
+              }
+            }
+          }
+        }
+
         const defaultCrop = { x: 0.055, y: 0.002, width: 0.144, height: 0.311, referenceAspect: 2.165, rotate180: true, version: 3 };
         if (!activeRoom) {
           const salt = randomBytes(16);
@@ -170,6 +202,7 @@ export function createApp({ adminKey, publisherKeys = '', publicURL, now = Date.
           const publishToken = token(), viewToken = token();
           activeRoom = {
             owner: publisher.id,
+            deviceId: clientDeviceId,
             publishToken,
             viewToken,
             salt,
@@ -186,20 +219,21 @@ export function createApp({ adminKey, publisherKeys = '', publicURL, now = Date.
           };
           rooms.set(id, activeRoom);
           activeId = id;
-          console.log(`[AUTO-PAIR] Initialized fresh room ${activeId} for publisher ${publisher.id}`);
+          addLog('SERVER', `[AUTO-PAIR] Initialized fresh room ${activeId} for publisher ${publisher.id}, device: ${clientDeviceId || 'none'}`);
         } else {
           activeRoom.paired = true;
-          // Clean up older stale rooms of this publisher that have no viewers
+          // Clean up older stale rooms ONLY of the SAME device (prevents deleting other devices' rooms)
           for (const [id, r] of rooms) {
-            if (r.owner === publisher.id && id !== activeId) {
+            const sameScope = clientDeviceId ? (r.deviceId === clientDeviceId) : (r.owner === publisher.id && !r.deviceId);
+            if (sameScope && id !== activeId) {
               const hasViewers = (r.rtcSlots || []).some(x => x.viewer && now() - x.viewerAt < 25000);
               if (!hasViewers) {
-                addLog('SERVER', `[AUTO-PAIR] Pruning stale room ${id} for publisher ${publisher.id}`);
+                addLog('SERVER', `[AUTO-PAIR] Pruning stale room ${id} for device ${clientDeviceId || publisher.id}`);
                 rooms.delete(id);
               }
             }
           }
-          addLog('SERVER', `[AUTO-PAIR] Paired publisher ${publisher.id} with latest room ${activeId}`);
+          addLog('SERVER', `[AUTO-PAIR] Paired device ${clientDeviceId || publisher.id} with room ${activeId}`);
         }
         const config = {
           server: base.origin,
