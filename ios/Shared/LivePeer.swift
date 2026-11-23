@@ -287,6 +287,21 @@ final class LivePeer: NSObject, RTCPeerConnectionDelegate {
         }
         if offer {peer.offer(for:constraints,completionHandler:callback)}else{peer.answer(for:constraints,completionHandler:callback)}
     }
+    private func setRemote(_ sdp:String,type:RTCSdpType,peer:RTCPeerConnection) {
+        negotiating=true
+        peer.setRemoteDescription(RTCSessionDescription(type:type,sdp:sdp)) { [weak self,weak peer] error in
+            guard let self=self,let peer=peer else{return}
+            self.queue.async {
+                guard self.pc === peer,!self.stopped else{return};self.negotiating=false
+                guard error==nil else{self.report("Lỗi thương lượng video từ máy bên kia.");return}
+                self.remoteReady=true
+                if !self.publisher {
+                    if let track=peer.receivers.compactMap({$0.track as? RTCVideoTrack}).first {self.onTrack?(track)}
+                    self.makeLocalDescription(offer:false,peer:peer)
+                }
+            }
+        }
+    }
     static func reorderSDPCodecs(_ sdp: String, preferVP8: Bool) -> String {
         let lines = sdp.components(separatedBy: "\n")
         var codecs: [String: String] = [:]
