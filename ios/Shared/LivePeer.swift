@@ -239,10 +239,10 @@ final class LivePeer: NSObject, RTCPeerConnectionDelegate {
                 let src = Self.factory.videoSource(forScreenCast: true)
                 Self.sharedSource = src
                 Self.sharedCapturer = RTCVideoCapturer(delegate: src)
-                Self.sharedTrack = Self.factory.videoTrack(with: src, trackId: "nb-map-video")
             }
-            let video = Self.sharedTrack!
+            let src = Self.sharedSource!
             Self.sourceLock.unlock()
+            let video = Self.factory.videoTrack(with: src, trackId: "nb-map-video-\(slot)")
             track = video
             sender = peer.add(video, streamIds: ["nb-map"])
             tuneSender()
@@ -264,22 +264,23 @@ final class LivePeer: NSObject, RTCPeerConnectionDelegate {
                 guard self.pc === peer,!self.stopped else{return}
                 guard error==nil,let sdp=sdp else{self.negotiating=false;self.report("Không tạo được mô tả video.");return}
                 
-                let rawSDP = sdp.sdp
-                let finalSDP: String
-                if self.publisher && offer {
-                    let preferVP8 = (self.slot >= 2)
-                    finalSDP = Self.reorderSDPCodecs(rawSDP, preferVP8: preferVP8)
-                } else {
-                    finalSDP = rawSDP
-                }
-                
-                let modDesc = RTCSessionDescription(type: sdp.type, sdp: finalSDP)
-                peer.setLocalDescription(modDesc) { [weak self,weak peer] error in
+                peer.setLocalDescription(sdp) { [weak self,weak peer] error in
                     guard let self=self,let peer=peer else{return}
                     self.queue.async {
                         guard self.pc === peer,!self.stopped else{return};self.negotiating=false
-                        guard error==nil else{self.report("Lỗi thiết lập video cục bộ.");return}
+                        if let error = error {
+                            self.remoteLog("setLocalDescription failed: \(error.localizedDescription)")
+                            self.report("Lỗi thiết lập video cục bộ.")
+                            return
+                        }
                         self.tuneSender()
+                        let finalSDP: String
+                        if self.publisher && offer {
+                            finalSDP = Self.reorderSDPCodecs(sdp.sdp, preferVP8: self.slot >= 2)
+                        } else {
+                            finalSDP = sdp.sdp
+                        }
+                        self.remoteLog("Sending offer to server (epoch: \(self.epoch), slot: \(self.slot), preferVP8: \(self.slot >= 2))...")
                         self.send(["op":offer ? "offer":"answer","epoch":self.epoch,"sdp":finalSDP])
                     }
                 }
@@ -293,8 +294,13 @@ final class LivePeer: NSObject, RTCPeerConnectionDelegate {
             guard let self=self,let peer=peer else{return}
             self.queue.async {
                 guard self.pc === peer,!self.stopped else{return};self.negotiating=false
-                guard error==nil else{self.report("Lỗi thương lượng video từ máy bên kia.");return}
+                if let error = error {
+                    self.remoteLog("setRemote error: \(error.localizedDescription)")
+                    self.report("Lỗi thương lượng video từ máy bên kia.")
+                    return
+                }
                 self.remoteReady=true
+                self.remoteLog("Remote description accepted (slot: \(self.slot))!")
                 if !self.publisher {
                     if let track=peer.receivers.compactMap({$0.track as? RTCVideoTrack}).first {self.onTrack?(track)}
                     self.makeLocalDescription(offer:false,peer:peer)
@@ -346,9 +352,12 @@ final class LivePeer: NSObject, RTCPeerConnectionDelegate {
             }
         }
         
+        if targetPTs.isEmpty { return sdp }
+        
         var modifiedLines: [String] = []
         for line in lines {
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty { continue }
             if trimmed.hasPrefix("m=video ") {
                 let parts = trimmed.components(separatedBy: " ")
                 if parts.count > 3 {

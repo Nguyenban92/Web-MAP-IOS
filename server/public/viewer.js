@@ -263,19 +263,43 @@ function escapeHtml(str) {
 
 const knownViewerKeys = new Set();
 
+function playDing() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    if (ctx.state === 'suspended') ctx.resume();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + 0.08);
+    gain.gain.setValueAtTime(0.4, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.25);
+  } catch {}
+}
+
 function speakJoined(name) {
   if (!('speechSynthesis' in window) || !name) return;
   try {
+    playDing();
     window.speechSynthesis.resume?.();
     const text = `${name.trim()} Lỏ đã vào phòng`;
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'vi-VN';
-    u.rate = 1.0;
-    u.pitch = 1.0;
+    u.rate = 0.95;
+    u.pitch = 1.15;
+    u.volume = 1.0;
     const voices = window.speechSynthesis.getVoices();
     const vi = voices.find(v => v.lang && v.lang.toLowerCase().replace('_', '-').startsWith('vi'));
     if (vi) u.voice = vi;
-    window.speechSynthesis.speak(u);
+    setTimeout(() => {
+      window.speechSynthesis.speak(u);
+    }, 150);
   } catch (err) {
     console.warn('Speech synthesis error:', err);
   }

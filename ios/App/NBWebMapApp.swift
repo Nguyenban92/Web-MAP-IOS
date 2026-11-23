@@ -788,26 +788,44 @@ struct PairingPanel: View {
     }
 }
 
-final class VoiceAnnouncer: NSObject {
+final class VoiceAnnouncer: NSObject, AVSpeechSynthesizerDelegate {
     static let shared = VoiceAnnouncer()
     private let synth = AVSpeechSynthesizer()
+    
+    override init() {
+        super.init()
+        synth.delegate = self
+    }
     
     func speakJoined(name: String) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         let text = "\(trimmed) Lỏ đã vào phòng"
         DispatchQueue.main.async {
-            try? AVAudioSession.sharedInstance().setCategory(.playback, options: [.mixWithOthers, .duckOthers])
-            try? AVAudioSession.sharedInstance().setActive(true)
+            do {
+                let session = AVAudioSession.sharedInstance()
+                try session.setCategory(.playback, mode: .spokenAudio, options: [.mixWithOthers, .duckOthers])
+                try session.setActive(true, options: .notifyOthersOnDeactivation)
+            } catch {
+                NSLog("[VoiceAnnouncer] AVAudioSession error: %@", error.localizedDescription)
+            }
+            
             let utterance = AVSpeechUtterance(string: text)
             if let viVoice = AVSpeechSynthesisVoice(language: "vi-VN") {
                 utterance.voice = viVoice
             } else {
                 utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
             }
-            utterance.rate = AVSpeechUtteranceDefaultSpeechRate
-            utterance.pitchMultiplier = 1.0
+            utterance.rate = 0.50
+            utterance.pitchMultiplier = 1.15
+            utterance.volume = 1.0
             self.synth.speak(utterance)
+        }
+    }
+    
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         }
     }
 }
