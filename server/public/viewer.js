@@ -68,7 +68,9 @@ function clearPeer(keepLastFrame = false) {
   if (!keepLastFrame) {
     video.srcObject = null;
     video.hidden = true;
+    if ($('quickPip')) $('quickPip').hidden = true;
     if ($('placeholder')) $('placeholder').hidden = false;
+    updatePipUI(false);
   }
   if ($('tapToPlay')) $('tapToPlay').hidden = true;
   remoteReady = false;
@@ -466,18 +468,111 @@ $('stop').onclick = () => {
   stop();
 };
 
+function isPipActive() {
+  if (document.pictureInPictureElement) return true;
+  if (typeof video.webkitPresentationMode === 'string') {
+    return video.webkitPresentationMode === 'picture-in-picture';
+  }
+  return false;
+}
+
+function updatePipUI(active) {
+  const pipBtn = $('pip');
+  const quickPip = $('quickPip');
+  if (pipBtn) {
+    pipBtn.innerHTML = active
+      ? '<i class="fa-solid fa-compress"></i> ĐÓNG CỬA SỔ'
+      : '<i class="fa-solid fa-clone"></i> CỬA SỔ NHỎ (PiP)';
+    pipBtn.classList.toggle('pip-active', !!active);
+  }
+  if (quickPip) {
+    quickPip.innerHTML = active
+      ? '<i class="fa-solid fa-compress"></i> <span>ĐÓNG CỬA SỔ</span>'
+      : '<i class="fa-solid fa-clone"></i> <span>CỬA SỔ NHỎ</span>';
+    quickPip.classList.toggle('pip-active', !!active);
+  }
+}
+
+async function togglePiP() {
+  try {
+    if ('audioSession' in navigator) {
+      try { navigator.audioSession.type = 'playback'; } catch {}
+    }
+    if ('mediaSession' in navigator) {
+      try {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: 'Ma Giáo Live Map AOV',
+          artist: 'Radar Trực Tiếp',
+          album: 'Live Radar VIP'
+        });
+      } catch {}
+    }
+
+    // 1. WebKit presentation mode (Native iOS Safari on iPhone & iPad)
+    if (typeof video.webkitSetPresentationMode === 'function') {
+      const mode = video.webkitPresentationMode;
+      const target = mode === 'picture-in-picture' ? 'inline' : 'picture-in-picture';
+      video.webkitSetPresentationMode(target);
+      updatePipUI(target === 'picture-in-picture');
+      return;
+    }
+
+    // 2. Standard W3C PiP (Chrome, Edge, Android, Desktop Safari)
+    if (document.pictureInPictureElement) {
+      await document.exitPictureInPicture();
+      updatePipUI(false);
+    } else if (video.requestPictureInPicture) {
+      await video.requestPictureInPicture();
+      updatePipUI(true);
+    } else {
+      message('Trình duyệt chưa hỗ trợ cửa sổ nhỏ PiP.');
+    }
+  } catch (err) {
+    console.warn('PiP error:', err);
+    if (typeof video.webkitSetPresentationMode === 'function') {
+      try {
+        video.webkitSetPresentationMode('picture-in-picture');
+        updatePipUI(true);
+        return;
+      } catch {}
+    }
+    message('Không thể mở cửa sổ nhỏ. Hãy chạm phát video trước.');
+  }
+}
+
+video.addEventListener('enterpictureinpicture', () => updatePipUI(true));
+video.addEventListener('leavepictureinpicture', () => updatePipUI(false));
+if (typeof video.webkitSetPresentationMode === 'function') {
+  video.addEventListener('webkitpresentationmodechanged', () => {
+    updatePipUI(video.webkitPresentationMode === 'picture-in-picture');
+  });
+}
+
 video.onclick = () => {
-  video.play().catch(() => {});
-  if ($('tapToPlay')) $('tapToPlay').hidden = true;
+  if (video.paused) {
+    video.play().catch(() => {});
+    if ($('tapToPlay')) $('tapToPlay').hidden = true;
+  } else {
+    togglePiP();
+  }
 };
 
 video.onplaying = () => {
   if ($('tapToPlay')) $('tapToPlay').hidden = true;
   video.hidden = false;
+  if ($('quickPip')) $('quickPip').hidden = false;
   if ($('placeholder')) $('placeholder').hidden = true;
   badge('TRỰC TIẾP');
   message('Đang phát trực tiếp');
+  updatePipUI(isPipActive());
 };
+
+if ($('quickPip')) {
+  $('quickPip').onclick = (e) => {
+    e.stopPropagation();
+    togglePiP();
+  };
+}
 
 if ($('tapToPlay')) {
   $('tapToPlay').onclick = () => {
@@ -491,23 +586,15 @@ $('fullscreen').onclick = () => {
   else if (video.webkitEnterFullscreen) video.webkitEnterFullscreen();
 };
 
-$('pip').onclick = async () => {
-  try {
-    if (document.pictureInPictureElement) {
-      await document.exitPictureInPicture();
-    } else if (video.requestPictureInPicture) {
-      await video.requestPictureInPicture();
-    } else if (video.webkitSetPresentationMode) {
-      video.webkitSetPresentationMode('picture-in-picture');
-    } else {
-      message('Trình duyệt chưa hỗ trợ PiP.');
-    }
-  } catch (err) {
-    message('Không thể mở PiP.');
-  }
+$('pip').onclick = () => {
+  togglePiP();
 };
 
-window.addEventListener('pagehide', () => { stop(); });
+window.addEventListener('pagehide', () => {
+  if (!isPipActive()) {
+    stop();
+  }
+});
 
 function updateRoomState() {
   const p = getPieces();

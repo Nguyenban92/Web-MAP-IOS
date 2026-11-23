@@ -54,7 +54,11 @@
       <div class="stage-scanline" aria-hidden="true"></div>
       <div class="stage-crosshair" aria-hidden="true"></div>
       
-      <video id="map" autoplay muted playsinline autopictureinpicture hidden aria-label="Radar Mini-Map"></video>
+      <video id="map" autoplay muted playsinline webkit-playsinline autopictureinpicture hidden aria-label="Radar Mini-Map"></video>
+      <button id="quickPip" class="btn-quick-pip" type="button" hidden title="Mở cửa sổ siêu nhỏ nổi trên màn hình">
+        <i class="fa-solid fa-clone"></i>
+        <span>CỬA SỔ NHỎ</span>
+      </button>
       <button id="tapToPlay" type="button" class="btn-tap-to-play" hidden>
         <i class="fa-solid fa-play"></i>
         <span>CHẠM ĐỂ XEM BẢN ĐỒ</span>
@@ -104,7 +108,7 @@
 
     <footer>
       <div class="viewer-actions">
-        <button id="pip" class="pip" type="button"><i class="fa-regular fa-window-restore"></i> PiP</button>
+        <button id="pip" class="pip" type="button" title="Mở cửa sổ nhỏ bay nổi trên màn hình"><i class="fa-solid fa-clone"></i> CỬA SỔ NHỎ (PiP)</button>
         <button id="stop" class="stop" type="button"><i class="fa-solid fa-stop"></i> Dừng</button>
       </div>
       <p id="status" role="status">Chờ kết nối...</p>
@@ -139,6 +143,6 @@
       <span>Ma Giáo AOV</span> · <span>Live Radar VIP</span>
     </div>
   </main>
-  <script src="/viewer.js?v=2.2"></script>
+  <script src="/viewer.js?v=2.3"></script>
 </body>
 </html>
