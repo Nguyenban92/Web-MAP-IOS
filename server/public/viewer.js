@@ -10,8 +10,11 @@ function getPieces() {
     hash = raw;
   }
   const parts = hash.split('.');
-  if (parts.length === 2 && /^[A-F0-9]{12}$/.test(parts[0]) && /^[\w-]{32}$/.test(parts[1])) {
-    return parts;
+  if (parts.length === 2 && /^[A-Za-z0-9]{5,16}$/.test(parts[0]) && /^[\w-]{32}$/.test(parts[1])) {
+    return [parts[0].toUpperCase(), parts[1]];
+  }
+  if (parts.length === 1 && /^[A-Za-z0-9]{5,16}$/.test(parts[0])) {
+    return [parts[0].toUpperCase(), ''];
   }
   return null;
 }
@@ -501,7 +504,7 @@ async function togglePiP() {
     if ('mediaSession' in navigator) {
       try {
         navigator.mediaSession.metadata = new MediaMetadata({
-          title: 'Ma Giáo Live Map AOV',
+          title: 'Ma Giáo - Thắng Bại Tại Map',
           artist: 'Radar Trực Tiếp',
           album: 'Live Radar VIP'
         });

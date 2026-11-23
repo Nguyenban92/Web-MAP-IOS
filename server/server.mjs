@@ -7,6 +7,15 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 const derive = promisify(scrypt);
 const token = () => randomBytes(24).toString('base64url');
+const ROOM_ID_CHARS = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+function generateRoomId() {
+  let id = '';
+  const bytes = randomBytes(5);
+  for (let i = 0; i < 5; i++) {
+    id += ROOM_ID_CHARS[bytes[i] % ROOM_ID_CHARS.length];
+  }
+  return id;
+}
 const same = (a, b) => typeof a === 'string' && typeof b === 'string' && Buffer.byteLength(a) === Buffer.byteLength(b) && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 const bearer = req => req.headers.authorization?.replace(/^Bearer /, '') || '';
 const fail = (status, message) => Object.assign(new Error(message), { status });
@@ -141,7 +150,7 @@ export function createApp({ adminKey, publisherKeys = '', publicURL, now = Date.
         const deviceId = req.headers['x-device-id'] || input?.deviceId || null;
         const salt = randomBytes(16);
         const hash = input.password ? await derive(input.password, salt, 32) : null;
-        const id = randomBytes(6).toString('hex').toUpperCase();
+        const id = generateRoomId();
         const publishToken = token(), viewToken = token();
         const defaultCrop = { x: 0.055, y: 0.002, width: 0.144, height: 0.311, referenceAspect: 2.165, rotate180: true, version: 3 };
         const crop = input?.crop || defaultCrop;
@@ -199,7 +208,7 @@ export function createApp({ adminKey, publisherKeys = '', publicURL, now = Date.
         const defaultCrop = { x: 0.055, y: 0.002, width: 0.144, height: 0.311, referenceAspect: 2.165, rotate180: true, version: 3 };
         if (!activeRoom) {
           const salt = randomBytes(16);
-          const id = randomBytes(6).toString('hex').toUpperCase();
+          const id = generateRoomId();
           const publishToken = token(), viewToken = token();
           activeRoom = {
             owner: publisher.id,
@@ -260,7 +269,7 @@ export function createApp({ adminKey, publisherKeys = '', publicURL, now = Date.
         pairs.delete(key); r.paired = true;
         send(200, pair.config); return;
       }
-      const match = /^\/api\/rooms\/([A-F0-9]{12})(?:\/(frame|access|pair|status|rtc))?$/.exec(path);
+      const match = /^\/api\/rooms\/([A-Za-z0-9]{5,16})(?:\/(frame|access|pair|status|rtc))?$/.exec(path);
       if (!match) throw fail(404, 'Not found');
       const [, id, action] = match;
       const room = rooms.get(id);
@@ -308,7 +317,8 @@ export function createApp({ adminKey, publisherKeys = '', publicURL, now = Date.
       }
       if (action === 'access' && req.method === 'POST') {
         limited('access:' + id, 40, 60000);
-        if (!same(bearer(req), room.viewToken)) throw fail(401, 'Invalid viewing link');
+        const reqToken = bearer(req);
+        if (reqToken && !same(reqToken, room.viewToken)) throw fail(401, 'Invalid viewing link');
         let input; try { input = JSON.parse((await body(req, 2048)).toString()); } catch (e) { throw e.status ? e : fail(400, 'Invalid JSON'); }
         if (typeof input?.password !== 'string' || input.password.length > 128) throw fail(400, 'Invalid password');
         if (room.hash) {

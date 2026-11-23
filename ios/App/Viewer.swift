@@ -21,7 +21,7 @@ final class LivePiPViewController:AVPictureInPictureVideoCallViewController {
             videoSurface.topAnchor.constraint(equalTo:view.topAnchor),
             videoSurface.bottomAnchor.constraint(equalTo:view.bottomAnchor)
         ])
-        preferredContentSize=CGSize(width:220,height:220)
+        preferredContentSize=CGSize(width:140,height:140)
     }
 }
 struct MapPreview:UIViewRepresentable {
@@ -109,28 +109,52 @@ final class ViewerEngine:NSObject,ObservableObject,AVPictureInPictureControllerD
     }
     func connect(link:String,password:String,forceRelay:Bool=false) async {
         stop();let attempt=connectionID
-        guard let url=URL(string:link.trimmingCharacters(in:.whitespacesAndNewlines)),url.scheme=="https",url.host != nil,url.user==nil,url.password==nil,let fragment=url.fragment else{message="Cần link HTTPS đầy đủ từ người phát.";return}
-        let parts=fragment.split(separator:".")
-        guard parts.count==2,parts[0].count==12,parts[1].count==32,parts[0].allSatisfy({"0123456789ABCDEF".contains($0)}) else{message="Link phòng không hợp lệ.";return}
-        var base=URLComponents(url:url,resolvingAgainstBaseURL:false)!
-        base.fragment=nil;base.query=nil;base.path=""
-        let origin=base.url!.absoluteString.trimmingCharacters(in:CharacterSet(charactersIn:"/"))
-        base.path="/api/rooms/\(parts[0])/access"
-        var req=URLRequest(url:base.url!);req.httpMethod="POST";req.timeoutInterval=10
-        req.setValue("Bearer \(parts[1])",forHTTPHeaderField:"Authorization");req.setValue("application/json",forHTTPHeaderField:"Content-Type")
-        req.httpBody=try? JSONSerialization.data(withJSONObject:["password":password]);message="Đang kiểm tra phòng…"
+        let trimmed=link.trimmingCharacters(in:.whitespacesAndNewlines)
+        guard !trimmed.isEmpty else{message="Vui lòng nhập ID hoặc Link phòng.";return}
+        var origin="https://magiao-live-map-aov.onrender.com"
+        var roomID=""
+        var secret=""
+        if trimmed.lowercased().hasPrefix("http://") || trimmed.lowercased().hasPrefix("https://") {
+            guard let url=URL(string:trimmed),url.host != nil else{message="Link phòng không hợp lệ.";return}
+            var base=URLComponents(url:url,resolvingAgainstBaseURL:false)!
+            base.fragment=nil;base.query=nil;base.path=""
+            origin=base.url!.absoluteString.trimmingCharacters(in:CharacterSet(charactersIn:"/"))
+            if let fragment=url.fragment {
+                let parts=fragment.split(separator:".")
+                if parts.count>=1 { roomID=String(parts[0]).uppercased() }
+                if parts.count>=2 { secret=String(parts[1]) }
+            }
+        } else {
+            var raw=trimmed
+            if raw.hasPrefix("#") { raw=String(raw.dropFirst()) }
+            let parts=raw.split(separator:".")
+            if parts.count>=1 { roomID=String(parts[0]).uppercased() }
+            if parts.count>=2 { secret=String(parts[1]) }
+        }
+        guard !roomID.isEmpty, roomID.count>=4, roomID.count<=16 else{
+            message="ID phòng phải gồm 5 số/chữ."
+            return
+        }
+        guard let accessURL=URL(string:"\(origin)/api/rooms/\(roomID)/access") else{message="Lỗi địa chỉ máy chủ.";return}
+        var req=URLRequest(url:accessURL);req.httpMethod="POST";req.timeoutInterval=10
+        if !secret.isEmpty { req.setValue("Bearer \(secret)",forHTTPHeaderField:"Authorization") }
+        req.setValue("application/json",forHTTPHeaderField:"Content-Type")
+        req.httpBody=try? JSONSerialization.data(withJSONObject:["password":password]);message="Đang vào phòng \(roomID)..."
         do {
             let (data,response)=try await URLSession.shared.data(for:req)
             guard attempt==connectionID else{return}
             let code=(response as? HTTPURLResponse)?.statusCode
-            guard code==200,let result=try JSONSerialization.jsonObject(with:data) as? [String:String],let token=result["token"] else{message=code==403 ? "Sai mật khẩu phòng.":"Không vào được phòng (HTTP \(code ?? 0)).";return}
+            guard code==200,let result=try JSONSerialization.jsonObject(with:data) as? [String:String],let token=result["token"] else{
+                message=code==403 ? "Sai mật khẩu phòng.":(code==404 ? "Phòng không tồn tại hoặc đã đóng.":"Lỗi vào phòng (HTTP \(code ?? 0)).")
+                return
+            }
             try AVAudioSession.sharedInstance().setCategory(.playback,mode:.moviePlayback,options:[.mixWithOthers])
             try AVAudioSession.sharedInstance().setActive(true)
-            connected=true;accessToken=token;base.path="/api/rooms/\(parts[0])/rtc";leaveURL=base.url
-            let p=LivePeer(server:origin,roomID:String(parts[0]),credential:token,publisher:false,forceRelay:forceRelay)
+            connected=true;accessToken=token;leaveURL=URL(string:"\(origin)/api/rooms/\(roomID)/rtc")
+            let p=LivePeer(server:origin,roomID:roomID,credential:token,publisher:false,forceRelay:forceRelay)
             p.onStatus = { [weak self] text in DispatchQueue.main.async{guard let self=self,self.connectionID==attempt else{return};self.message=text} }
             p.onStats = { [weak self] text in DispatchQueue.main.async{guard let self=self,self.connectionID==attempt else{return};self.stats=text} }
-            p.onEnded = { [weak self] in DispatchQueue.main.async{guard let self=self,self.connectionID==attempt else{return};self.stop();self.message="Phiên đã kết thúc. Kiểm tra mạng hoặc xin link mới."} }
+            p.onEnded = { [weak self] in DispatchQueue.main.async{guard let self=self,self.connectionID==attempt else{return};self.stop();self.message="Phòng đã kết thúc."} }
             p.onTrack = { [weak self] track in DispatchQueue.main.async {
                 guard let self=self,self.connectionID==attempt else{return}
                 self.track?.remove(self.sink);self.track=track;track.add(self.sink)
@@ -182,23 +206,23 @@ final class ViewerEngine:NSObject,ObservableObject,AVPictureInPictureControllerD
 }
 struct ViewerView:View {
     @StateObject private var engine=ViewerEngine()
-    @State private var link=""
+    @State private var roomOrLink=""
     @State private var password=""
     @State private var forceRelay=false
     var body:some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing:18) {
+                VStack(spacing:16) {
                     // Header Brand
                     HStack {
                         VStack(alignment:.leading,spacing:2) {
                             Text("MA GIÁO")
                                 .font(.system(size:32,weight:.black,design:.rounded))
                                 .foregroundStyle(LinearGradient(colors:[Studio.gold,Color(red:1,green:0.91,blue:0.58)],startPoint:.topLeading,endPoint:.bottomTrailing))
-                            Text("LIVE MAP AOV")
-                                .font(.system(size:11,weight:.bold,design:.rounded))
-                                .tracking(3)
-                                .foregroundStyle(.white.opacity(0.8))
+                            Text("Thắng Bại Tại Map")
+                                .font(.system(size:12,weight:.bold,design:.rounded))
+                                .tracking(2)
+                                .foregroundStyle(.white.opacity(0.85))
                         }
                         Spacer()
                         HStack(spacing:6) {
@@ -213,80 +237,112 @@ struct ViewerView:View {
 
                     // Card Kết nối
                     VStack(alignment:.leading,spacing:12) {
-                        HStack {
-                            Label("KẾT NỐI PHÒNG",systemImage:"link")
-                                .font(.caption.bold())
-                                .foregroundStyle(Studio.gold)
-                            Spacer()
-                            if !link.isEmpty {
-                                Button("Xóa") { link = "" }
-                                    .font(.caption2.bold())
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-
-                        HStack {
-                            TextField("Dán link phòng...", text:$link)
-                                .font(.subheadline)
-                                .keyboardType(.URL)
-                                .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled()
-                            Button {
-                                if let clip = UIPasteboard.general.string {
-                                    link = clip.trimmingCharacters(in: .whitespacesAndNewlines)
-                                }
-                            } label: {
-                                Image(systemName: "doc.on.clipboard")
-                                    .font(.subheadline)
+                        // HÀNG 1: Ô NHẬP ID/LINK VÀ Ô NHẬP MẬT KHẨU CÙNG 1 HÀNG
+                        HStack(spacing: 8) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "number")
+                                    .font(.caption2)
                                     .foregroundStyle(Studio.aqua)
+                                TextField("Nhập ID / Link", text: $roomOrLink)
+                                    .font(.subheadline)
+                                    .textInputAutocapitalization(.characters)
+                                    .autocorrectionDisabled()
+                                if !roomOrLink.isEmpty {
+                                    Button { roomOrLink = "" } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                } else {
+                                    Button {
+                                        if let clip = UIPasteboard.general.string {
+                                            roomOrLink = clip.trimmingCharacters(in: .whitespacesAndNewlines)
+                                        }
+                                    } label: {
+                                        Image(systemName: "doc.on.clipboard")
+                                            .font(.caption2)
+                                            .foregroundStyle(Studio.aqua)
+                                    }
+                                }
                             }
-                        }
-                        .padding(12)
-                        .background(Color.black.opacity(0.4), in: RoundedRectangle(cornerRadius: 12))
-                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.15), lineWidth: 1))
-
-                        SecureField("Mật khẩu (nếu có)", text:$password)
-                            .font(.subheadline)
-                            .padding(12)
-                            .background(Color.black.opacity(0.4), in: RoundedRectangle(cornerRadius: 12))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 10)
+                            .background(Color.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 12))
                             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.15), lineWidth: 1))
 
+                            HStack(spacing: 6) {
+                                Image(systemName: "lock.fill")
+                                    .font(.caption2)
+                                    .foregroundStyle(Studio.gold)
+                                SecureField("Mật khẩu", text: $password)
+                                    .font(.subheadline)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 10)
+                            .frame(width: 125)
+                            .background(Color.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 12))
+                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.15), lineWidth: 1))
+                        }
+
+                        // HÀNG 2: NÚT VÀO PHÒNG VÀ NÚT CỬA SỔ MAP CÙNG 1 HÀNG
                         HStack(spacing: 10) {
                             Button {
-                                Task { await engine.connect(link:link,password:password,forceRelay:forceRelay) }
+                                Task { await engine.connect(link: roomOrLink, password: password, forceRelay: forceRelay) }
                             } label: {
-                                HStack(spacing: 8) {
+                                HStack(spacing: 6) {
                                     Image(systemName: "play.fill")
-                                    Text("VÀO XEM")
-                                        .font(.system(size: 16, weight: .black, design: .rounded))
+                                        .font(.caption)
+                                    Text(engine.connected ? "ĐÃ VÀO" : "Vào Phòng")
+                                        .font(.system(size: 15, weight: .bold, design: .rounded))
                                 }
                                 .foregroundStyle(.black)
                                 .frame(maxWidth: .infinity)
-                                .frame(height: 48)
+                                .frame(height: 46)
                                 .background(
                                     LinearGradient(colors: [Studio.gold, Color(red: 1, green: 0.84, blue: 0.38)], startPoint: .topLeading, endPoint: .bottomTrailing),
                                     in: RoundedRectangle(cornerRadius: 12)
                                 )
-                                .shadow(color: Studio.gold.opacity(0.3), radius: 6, y: 2)
+                                .shadow(color: Studio.gold.opacity(0.35), radius: 6, y: 2)
                             }
                             .disabled(engine.connected)
-                            .opacity(engine.connected ? 0.5 : 1.0)
+                            .opacity(engine.connected ? 0.6 : 1.0)
+
+                            Button {
+                                engine.startPiP()
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "pip.enter")
+                                        .font(.caption)
+                                    Text(engine.pipActive ? "Đang Mở" : "Cửa Sổ Map")
+                                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                                }
+                                .foregroundStyle(.black)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 46)
+                                .background(
+                                    LinearGradient(colors: [Studio.aqua, Color(red: 0.4, green: 0.85, blue: 1)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                                    in: RoundedRectangle(cornerRadius: 12)
+                                )
+                                .shadow(color: Studio.aqua.opacity(0.35), radius: 6, y: 2)
+                            }
+                            .disabled(!engine.hasFrame || engine.pipActive)
+                            .opacity(!engine.hasFrame || engine.pipActive ? 0.5 : 1.0)
 
                             if engine.connected {
                                 Button(role: .destructive) {
                                     engine.stop()
                                 } label: {
-                                    Text("DỪNG")
-                                        .font(.system(size: 15, weight: .bold))
+                                    Image(systemName: "xmark")
+                                        .font(.system(size: 14, weight: .bold))
                                         .foregroundStyle(.red)
-                                        .frame(width: 80, height: 48)
+                                        .frame(width: 46, height: 46)
                                         .background(Color.red.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
                                         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.red.opacity(0.3), lineWidth: 1))
                                 }
                             }
                         }
                     }
-                    .padding(16)
+                    .padding(14)
                     .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 18))
                     .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.white.opacity(0.08), lineWidth: 1))
 
@@ -316,28 +372,6 @@ struct ViewerView:View {
                     }
                     .frame(maxWidth: .infinity)
 
-                    // Nút MỞ CỬA SỔ SIÊU NHỎ 1:1
-                    Button {
-                        engine.startPiP()
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "pip.enter")
-                                .font(.title3)
-                            Text(engine.pipActive ? "CỬA SỔ ĐANG MỞ" : "MỞ CỬA SỔ SIÊU NHỎ (1:1)")
-                                .font(.system(size: 16, weight: .black, design: .rounded))
-                        }
-                        .foregroundStyle(.black)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 52)
-                        .background(
-                            LinearGradient(colors: [Studio.aqua, Color(red: 0.4, green: 0.85, blue: 1)], startPoint: .topLeading, endPoint: .bottomTrailing),
-                            in: RoundedRectangle(cornerRadius: 14)
-                        )
-                        .shadow(color: Studio.aqua.opacity(0.35), radius: 8, y: 3)
-                    }
-                    .disabled(!engine.hasFrame || engine.pipActive)
-                    .opacity(!engine.hasFrame || engine.pipActive ? 0.5 : 1.0)
-
                     // Hero Art
                     HeroBannerView()
                 }
@@ -346,8 +380,11 @@ struct ViewerView:View {
             .background(LinearGradient(colors:[Studio.background,Color(red:0.01,green:0.08,blue:0.14),Studio.background],startPoint:.topLeading,endPoint:.bottomTrailing).ignoresSafeArea())
             .navigationBarHidden(true)
             .onAppear {
-                if link.isEmpty, let clip = UIPasteboard.general.string, clip.contains("https://"), clip.contains("#") {
-                    link = clip.trimmingCharacters(in: .whitespacesAndNewlines)
+                if roomOrLink.isEmpty, let clip = UIPasteboard.general.string {
+                    let c = clip.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if c.contains("https://") || (c.count >= 4 && c.count <= 16 && !c.contains(" ")) {
+                        roomOrLink = c
+                    }
                 }
             }
         }

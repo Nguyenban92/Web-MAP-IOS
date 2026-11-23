@@ -295,10 +295,10 @@ struct ContentView: View {
                             Text("MA GIÁO")
                                 .font(.system(size: 32, weight: .black, design: .rounded))
                                 .foregroundStyle(LinearGradient(colors: [Studio.gold, Color(red: 1, green: 0.91, blue: 0.58)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                            Text("LIVE MAP AOV")
-                                .font(.system(size: 11, weight: .bold, design: .rounded))
-                                .tracking(3)
-                                .foregroundStyle(.white.opacity(0.8))
+                            Text("Thắng Bại Tại Map")
+                                .font(.system(size: 12, weight: .bold, design: .rounded))
+                                .tracking(2)
+                                .foregroundStyle(.white.opacity(0.85))
                         }
                         Spacer()
                         // Status badge
@@ -434,12 +434,22 @@ struct ContentView: View {
                         VStack(alignment: .leading, spacing: 14) {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text("PHÒNG HOẠT ĐỘNG")
+                                    Text("MÃ PHÒNG (5 KÝ TỰ)")
                                         .font(.caption2.bold())
                                         .foregroundStyle(Studio.aqua)
-                                    Text(room.id)
-                                        .font(.system(size: 20, weight: .bold, design: .monospaced))
-                                        .textSelection(.enabled)
+                                    HStack(spacing: 8) {
+                                        Text(room.id)
+                                            .font(.system(size: 24, weight: .black, design: .monospaced))
+                                            .foregroundStyle(Studio.gold)
+                                            .textSelection(.enabled)
+                                        Button {
+                                            UIPasteboard.general.string = room.id
+                                        } label: {
+                                            Image(systemName: "doc.on.doc.fill")
+                                                .font(.caption)
+                                                .foregroundStyle(Studio.aqua)
+                                        }
+                                    }
                                 }
                                 Spacer()
                                 Button {
@@ -765,7 +775,7 @@ struct RootView: View {
             ViewerView().tabItem { Label("Xem / PiP", systemImage: "pip") }
             NavigationStack {
                 ScrollView {
-                    Text("Ma Giáo Live Map AOV\n\n1. Nhập mật khẩu người xem (hoặc để trống) rồi bấm TẠO PHÒNG.\n2. Bấm Gửi link chia sẻ cho đồng đội hoặc quét mã QR.\n3. Bấm Bắt đầu phát → Chạm biểu tượng ghi màn hình → Chọn Live - Ma Giáo AOV.\n4. Sau trận đấu bấm DỪNG PHÁT.")
+                    Text("Ma Giáo - Thắng Bại Tại Map\n\n1. Nhập mật khẩu người xem (hoặc để trống) rồi bấm TẠO PHÒNG.\n2. Bấm Gửi link chia sẻ hoặc đọc Mã Phòng 5 ký tự cho đồng đội.\n3. Bấm Bắt đầu phát → Chạm biểu tượng ghi màn hình → Chọn Live - Ma Giáo AOV.\n4. Sau trận đấu bấm DỪNG PHÁT.")
                         .padding()
                 }
                 .navigationTitle("Hướng dẫn")
