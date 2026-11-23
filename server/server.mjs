@@ -56,7 +56,8 @@ export function createApp({ adminKey, publisherKeys = '', publicURL, now = Date.
     ['/admin', ['admin.html', 'text/html; charset=utf-8']],
     ['/admin.css', ['admin.css', 'text/css; charset=utf-8']],
     ['/admin.js', ['admin.js', 'text/javascript; charset=utf-8']],
-    ['/thove-nb-logo.jpg', ['thove-nb-logo.jpg', 'image/jpeg']]
+    ['/thove-nb-logo.jpg', ['thove-nb-logo.jpg', 'image/jpeg']],
+    ['/hero-art.jpg', ['hero-art.jpg', 'image/jpeg']]
   ]);
   // A broadcasting room has no fixed lifetime. It closes only when the app
   // explicitly deletes it or publisher activity has been absent for `lease`.

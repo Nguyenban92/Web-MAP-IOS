@@ -215,7 +215,8 @@ struct ViewerView:View {
                         Toggle("Chỉ dùng TURN",isOn:$forceRelay).disabled(engine.connected)
                         Text("Mặc định dùng P2P, tự thử TURN nếu máy chủ đã cấu hình. Chỉ bật ép TURN khi có dịch vụ chuyển tiếp. RTT là thời gian mạng khứ hồi, không phải độ trễ toàn bộ hình ảnh.").font(.caption).foregroundStyle(.secondary)
                     }
-                    HStack { Text("Tối đa 4 người xem • Ma Giáo Live Map AOV").font(.caption).foregroundStyle(.secondary); Spacer() }
+                    HStack { Text("Tối đa 6 người xem • Ma Giáo Live Map AOV").font(.caption).foregroundStyle(.secondary); Spacer() }
+                    HeroBannerView()
                 }.textFieldStyle(.roundedBorder).padding()
             }.background(LinearGradient(colors:[Studio.background,Color(red:0.01,green:0.08,blue:0.14),Studio.background],startPoint:.topLeading,endPoint:.bottomTrailing).ignoresSafeArea()).navigationTitle("Xem / PiP")
         }

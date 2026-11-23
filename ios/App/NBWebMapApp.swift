@@ -552,6 +552,8 @@ struct ContentView: View {
                         }
                         .padding(.horizontal, 4)
                     }
+                    
+                    HeroBannerView()
                 }
                 .padding()
             }
@@ -785,6 +787,53 @@ struct PairingPanel: View {
             Text("Bấm biểu tượng → chọn Ma Giáo Live Map Broadcast. Giữ màn hình này đến khi báo Đã ghép nối. Mã dùng một lần, hết hạn sau 90 giây.").font(.caption)
             Text(status).font(.caption).foregroundStyle(.mint)
         }.frame(maxWidth: .infinity)
+    }
+}
+
+struct HeroBannerView: View {
+    var body: some View {
+        let image: Image = {
+            if let uiImg = UIImage(named: "HeroArt") {
+                return Image(uiImage: uiImg)
+            } else if let path = Bundle.main.path(forResource: "HeroArt", ofType: "jpg"),
+                      let uiImg = UIImage(contentsOfFile: path) {
+                return Image(uiImage: uiImg)
+            } else {
+                return Image("HeroArt")
+            }
+        }()
+        
+        ZStack(alignment: .top) {
+            image
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: .infinity)
+            
+            // Seamless top fade matching illustration
+            LinearGradient(
+                stops: [
+                    .init(color: Studio.background, location: 0.0),
+                    .init(color: Studio.background.opacity(0.85), location: 0.12),
+                    .init(color: Studio.background.opacity(0.3), location: 0.28),
+                    .init(color: .clear, location: 0.5)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            
+            // Subtle bottom fade
+            LinearGradient(
+                stops: [
+                    .init(color: .clear, location: 0.72),
+                    .init(color: Studio.background.opacity(0.6), location: 0.88),
+                    .init(color: Studio.background, location: 1.0)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+        .padding(.horizontal, -16)
+        .allowsHitTesting(false)
     }
 }
 
