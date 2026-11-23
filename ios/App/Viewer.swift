@@ -13,7 +13,7 @@ final class LivePiPViewController:AVPictureInPictureVideoCallViewController {
         super.viewDidLoad()
         view.backgroundColor = .black
         videoSurface.translatesAutoresizingMaskIntoConstraints=false
-        videoSurface.display.videoGravity = .resizeAspect
+        videoSurface.display.videoGravity = .resizeAspectFill
         view.addSubview(videoSurface)
         NSLayoutConstraint.activate([
             videoSurface.leadingAnchor.constraint(equalTo:view.leadingAnchor),
@@ -21,9 +21,7 @@ final class LivePiPViewController:AVPictureInPictureVideoCallViewController {
             videoSurface.topAnchor.constraint(equalTo:view.topAnchor),
             videoSurface.bottomAnchor.constraint(equalTo:view.bottomAnchor)
         ])
-        // A wide live canvas lets the system offer a much shorter compact PiP
-        // than the old square media-player window. The square map stays fitted.
-        preferredContentSize=CGSize(width:320,height:180)
+        preferredContentSize=CGSize(width:220,height:220)
     }
 }
 struct MapPreview:UIViewRepresentable {
@@ -158,8 +156,8 @@ final class ViewerEngine:NSObject,ObservableObject,AVPictureInPictureControllerD
     private func blank() {
         hasFrame=false;surface.display.flushAndRemoveImage();pipViewController.videoSurface.display.flushAndRemoveImage()
         var buffer:CVPixelBuffer?
-        guard CVPixelBufferCreate(kCFAllocatorDefault,320,240,kCVPixelFormatType_32BGRA,[kCVPixelBufferIOSurfacePropertiesKey as String:[:]] as CFDictionary,&buffer)==kCVReturnSuccess,let buffer=buffer else{return}
-        imageContext.render(CIImage(color:.black).cropped(to:CGRect(x:0,y:0,width:320,height:240)),to:buffer);enqueue(buffer)
+        guard CVPixelBufferCreate(kCFAllocatorDefault,240,240,kCVPixelFormatType_32BGRA,[kCVPixelBufferIOSurfacePropertiesKey as String:[:]] as CFDictionary,&buffer)==kCVReturnSuccess,let buffer=buffer else{return}
+        imageContext.render(CIImage(color:.black).cropped(to:CGRect(x:0,y:0,width:240,height:240)),to:buffer);enqueue(buffer)
     }
     func startPiP() {
         guard hasFrame,let pip=pip else{message="Đợi có hình trước khi bật PiP.";return}
@@ -190,35 +188,168 @@ struct ViewerView:View {
     var body:some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment:.leading,spacing:20) {
-                    VStack(alignment:.leading,spacing:2) {
-                        Text("MA GIÁO").font(.system(size:34,weight:.black,design:.rounded)).foregroundStyle(LinearGradient(colors:[Studio.gold,.yellow.opacity(0.8)],startPoint:.topLeading,endPoint:.bottomTrailing))
-                        Text("LIVE MAP AOV").font(.system(size:12,weight:.semibold,design:.rounded)).tracking(3).foregroundStyle(.white.opacity(0.78))
+                VStack(spacing:18) {
+                    // Header Brand
+                    HStack {
+                        VStack(alignment:.leading,spacing:2) {
+                            Text("MA GIÁO")
+                                .font(.system(size:32,weight:.black,design:.rounded))
+                                .foregroundStyle(LinearGradient(colors:[Studio.gold,Color(red:1,green:0.91,blue:0.58)],startPoint:.topLeading,endPoint:.bottomTrailing))
+                            Text("LIVE MAP AOV")
+                                .font(.system(size:11,weight:.bold,design:.rounded))
+                                .tracking(3)
+                                .foregroundStyle(.white.opacity(0.8))
+                        }
+                        Spacer()
+                        HStack(spacing:6) {
+                            Circle().fill(engine.connected ? Color.green : Studio.aqua).frame(width:8,height:8)
+                            Text(engine.connected ? "Đang xem":"Sẵn sàng").font(.caption.bold()).foregroundStyle(.white)
+                        }
+                        .padding(.horizontal,12).padding(.vertical,6)
+                        .background(Color.white.opacity(0.08),in:Capsule())
+                        .overlay(Capsule().stroke(Color.white.opacity(0.15),lineWidth:1))
                     }
-                    HStack { Label("XEM TRỰC TIẾP",systemImage:"play.rectangle.fill").font(.headline).foregroundStyle(Studio.aqua); Spacer(); Text(engine.connected ? "ĐANG KẾT NỐI":"CHỜ KẾT NỐI").font(.caption2.bold()).foregroundStyle(engine.connected ? .green:.secondary).padding(.horizontal,10).padding(.vertical,6).background(.black.opacity(0.3),in:Capsule()) }
-                    Text("Nhận vùng bản đồ và mở cửa sổ siêu gọn khi chơi game.").foregroundStyle(.secondary)
-                    GroupBox("Kết nối phòng") {
-                        VStack(spacing:12) {
-                            HStack { TextField("Dán link xem HTTPS",text:$link).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled(); Button("Dán"){link=UIPasteboard.general.string ?? link} }
-                            SecureField("Mật khẩu phòng (nếu có)",text:$password)
-                            HStack {
-                                Button("Kết nối"){Task{await engine.connect(link:link,password:password,forceRelay:forceRelay)}}.buttonStyle(.borderedProminent).disabled(engine.connected)
-                                Button("Dừng xem",role:.destructive){engine.stop()}.buttonStyle(.bordered).disabled(!engine.connected)
+                    .padding(.top,4)
+
+                    // Card Kết nối
+                    VStack(alignment:.leading,spacing:12) {
+                        HStack {
+                            Label("KẾT NỐI PHÒNG",systemImage:"link")
+                                .font(.caption.bold())
+                                .foregroundStyle(Studio.gold)
+                            Spacer()
+                            if !link.isEmpty {
+                                Button("Xóa") { link = "" }
+                                    .font(.caption2.bold())
+                                    .foregroundStyle(.secondary)
                             }
-                        }.padding(.top,8)
-                    }.groupBoxStyle(StudioGroupBoxStyle())
-                    MapPreview(engine:engine).frame(height:300).background(.black).clipShape(RoundedRectangle(cornerRadius:18)).overlay(RoundedRectangle(cornerRadius:18).stroke(Studio.aqua.opacity(0.55)))
-                    Label(engine.message,systemImage:engine.hasFrame ? "checkmark.circle.fill":"antenna.radiowaves.left.and.right").font(.callout).foregroundStyle(Studio.aqua)
-                    Text(engine.stats).font(.system(.caption,design:.monospaced)).foregroundStyle(.secondary)
-                    Button{engine.startPiP()}label:{Label(engine.pipActive ? "PiP ĐANG MỞ":"MỞ CỬA SỔ SIÊU GỌN",systemImage:"pip.enter").font(.headline).frame(maxWidth:.infinity)}.buttonStyle(.borderedProminent).tint(Studio.aqua).foregroundStyle(.black).controlSize(.large).disabled(!engine.hasFrame||engine.pipActive)
-                    DisclosureGroup("Kết nối nâng cao") {
-                        Toggle("Chỉ dùng TURN",isOn:$forceRelay).disabled(engine.connected)
-                        Text("Mặc định dùng P2P, tự thử TURN nếu máy chủ đã cấu hình. Chỉ bật ép TURN khi có dịch vụ chuyển tiếp. RTT là thời gian mạng khứ hồi, không phải độ trễ toàn bộ hình ảnh.").font(.caption).foregroundStyle(.secondary)
+                        }
+
+                        HStack {
+                            TextField("Dán link phòng...", text:$link)
+                                .font(.subheadline)
+                                .keyboardType(.URL)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                            Button {
+                                if let clip = UIPasteboard.general.string {
+                                    link = clip.trimmingCharacters(in: .whitespacesAndNewlines)
+                                }
+                            } label: {
+                                Image(systemName: "doc.on.clipboard")
+                                    .font(.subheadline)
+                                    .foregroundStyle(Studio.aqua)
+                            }
+                        }
+                        .padding(12)
+                        .background(Color.black.opacity(0.4), in: RoundedRectangle(cornerRadius: 12))
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.15), lineWidth: 1))
+
+                        SecureField("Mật khẩu (nếu có)", text:$password)
+                            .font(.subheadline)
+                            .padding(12)
+                            .background(Color.black.opacity(0.4), in: RoundedRectangle(cornerRadius: 12))
+                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.15), lineWidth: 1))
+
+                        HStack(spacing: 10) {
+                            Button {
+                                Task { await engine.connect(link:link,password:password,forceRelay:forceRelay) }
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "play.fill")
+                                    Text("VÀO XEM")
+                                        .font(.system(size: 16, weight: .black, design: .rounded))
+                                }
+                                .foregroundStyle(.black)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 48)
+                                .background(
+                                    LinearGradient(colors: [Studio.gold, Color(red: 1, green: 0.84, blue: 0.38)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                                    in: RoundedRectangle(cornerRadius: 12)
+                                )
+                                .shadow(color: Studio.gold.opacity(0.3), radius: 6, y: 2)
+                            }
+                            .disabled(engine.connected)
+                            .opacity(engine.connected ? 0.5 : 1.0)
+
+                            if engine.connected {
+                                Button(role: .destructive) {
+                                    engine.stop()
+                                } label: {
+                                    Text("DỪNG")
+                                        .font(.system(size: 15, weight: .bold))
+                                        .foregroundStyle(.red)
+                                        .frame(width: 80, height: 48)
+                                        .background(Color.red.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
+                                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.red.opacity(0.3), lineWidth: 1))
+                                }
+                            }
+                        }
                     }
-                    HStack { Text("Tối đa 6 người xem • Ma Giáo Live Map AOV").font(.caption).foregroundStyle(.secondary); Spacer() }
+                    .padding(16)
+                    .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 18))
+                    .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.white.opacity(0.08), lineWidth: 1))
+
+                    // Khung xem trước hình vuông 1:1
+                    VStack(spacing: 8) {
+                        MapPreview(engine:engine)
+                            .aspectRatio(1, contentMode: .fit)
+                            .frame(maxWidth: 260)
+                            .background(.black)
+                            .clipShape(RoundedRectangle(cornerRadius:16))
+                            .overlay(RoundedRectangle(cornerRadius:16).stroke(Studio.aqua.opacity(0.4), lineWidth: 1))
+                            .shadow(color: Studio.aqua.opacity(0.2), radius: 10)
+
+                        HStack {
+                            Circle()
+                                .fill(engine.hasFrame ? Color.green : Color.orange)
+                                .frame(width: 6, height: 6)
+                            Text(engine.message)
+                                .font(.caption.bold())
+                                .foregroundStyle(engine.hasFrame ? Color.green : Studio.aqua)
+                        }
+                        if !engine.stats.isEmpty {
+                            Text(engine.stats)
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+
+                    // Nút MỞ CỬA SỔ SIÊU NHỎ 1:1
+                    Button {
+                        engine.startPiP()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "pip.enter")
+                                .font(.title3)
+                            Text(engine.pipActive ? "CỬA SỔ ĐANG MỞ" : "MỞ CỬA SỔ SIÊU NHỎ (1:1)")
+                                .font(.system(size: 16, weight: .black, design: .rounded))
+                        }
+                        .foregroundStyle(.black)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 52)
+                        .background(
+                            LinearGradient(colors: [Studio.aqua, Color(red: 0.4, green: 0.85, blue: 1)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                            in: RoundedRectangle(cornerRadius: 14)
+                        )
+                        .shadow(color: Studio.aqua.opacity(0.35), radius: 8, y: 3)
+                    }
+                    .disabled(!engine.hasFrame || engine.pipActive)
+                    .opacity(!engine.hasFrame || engine.pipActive ? 0.5 : 1.0)
+
+                    // Hero Art
                     HeroBannerView()
-                }.textFieldStyle(.roundedBorder).padding()
-            }.background(LinearGradient(colors:[Studio.background,Color(red:0.01,green:0.08,blue:0.14),Studio.background],startPoint:.topLeading,endPoint:.bottomTrailing).ignoresSafeArea()).navigationTitle("Xem / PiP")
+                }
+                .padding()
+            }
+            .background(LinearGradient(colors:[Studio.background,Color(red:0.01,green:0.08,blue:0.14),Studio.background],startPoint:.topLeading,endPoint:.bottomTrailing).ignoresSafeArea())
+            .navigationBarHidden(true)
+            .onAppear {
+                if link.isEmpty, let clip = UIPasteboard.general.string, clip.contains("https://"), clip.contains("#") {
+                    link = clip.trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+            }
         }
     }
 }
