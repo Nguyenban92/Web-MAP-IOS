@@ -73,6 +73,7 @@ final class ViewerEngine:NSObject,ObservableObject,AVPictureInPictureControllerD
     @Published var hasFrame=false
     @Published var paused=false
     @Published var pipActive=false
+    @Published var viewerName: String = UserDefaults.standard.string(forKey: "aov_viewer_name") ?? ""
     let surface=MapSurface()
     private let pipViewController=LivePiPViewController()
     private let sink=PiPFrameSink()
@@ -107,8 +108,13 @@ final class ViewerEngine:NSObject,ObservableObject,AVPictureInPictureControllerD
         CMTimebaseCreateWithSourceClock(allocator:kCFAllocatorDefault,sourceClock:CMClockGetHostTimeClock(),timebaseOut:&timebase)
         if let t=timebase {layer.controlTimebase=t;CMTimebaseSetTime(t,time:CMClockGetTime(CMClockGetHostTimeClock()));CMTimebaseSetRate(t,rate:1)}
     }
-    func connect(link:String,password:String,forceRelay:Bool=false) async {
+    func connect(link:String,password:String,name:String = "",forceRelay:Bool=false) async {
         stop();let attempt=connectionID
+        let trimmedName = name.trimmingCharacters(in:.whitespacesAndNewlines)
+        if !trimmedName.isEmpty {
+            self.viewerName = trimmedName
+            UserDefaults.standard.set(trimmedName, forKey: "aov_viewer_name")
+        }
         let trimmed=link.trimmingCharacters(in:.whitespacesAndNewlines)
         guard !trimmed.isEmpty else{message="Vui lòng nhập ID hoặc Link phòng.";return}
         var origin="https://magiao-live-map-aov.onrender.com"
@@ -151,7 +157,7 @@ final class ViewerEngine:NSObject,ObservableObject,AVPictureInPictureControllerD
             try AVAudioSession.sharedInstance().setCategory(.playback,mode:.moviePlayback,options:[.mixWithOthers])
             try AVAudioSession.sharedInstance().setActive(true)
             connected=true;accessToken=token;leaveURL=URL(string:"\(origin)/api/rooms/\(roomID)/rtc")
-            let p=LivePeer(server:origin,roomID:roomID,credential:token,publisher:false,forceRelay:forceRelay)
+            let p=LivePeer(server:origin,roomID:roomID,credential:token,publisher:false,viewerName:self.viewerName,forceRelay:forceRelay)
             p.onStatus = { [weak self] text in DispatchQueue.main.async{guard let self=self,self.connectionID==attempt else{return};self.message=text} }
             p.onStats = { [weak self] text in DispatchQueue.main.async{guard let self=self,self.connectionID==attempt else{return};self.stats=text} }
             p.onEnded = { [weak self] in DispatchQueue.main.async{guard let self=self,self.connectionID==attempt else{return};self.stop();self.message="Phòng đã kết thúc."} }
@@ -165,6 +171,14 @@ final class ViewerEngine:NSObject,ObservableObject,AVPictureInPictureControllerD
                 if Date().timeIntervalSince(self.lastFrame)>3 {self.blank()}
             }
         }catch{if attempt==connectionID{message=error.localizedDescription}}
+    }
+    func rename(_ newName: String) {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        self.viewerName = trimmed
+        UserDefaults.standard.set(trimmed, forKey: "aov_viewer_name")
+        peer?.rename(trimmed)
+        message = "Đã đổi tên: \(trimmed)"
     }
     private func enqueue(_ pixel:CVPixelBuffer) {
         var format:CMVideoFormatDescription?
@@ -206,9 +220,11 @@ final class ViewerEngine:NSObject,ObservableObject,AVPictureInPictureControllerD
 }
 struct ViewerView:View {
     @StateObject private var engine=ViewerEngine()
+    @State private var viewerName = UserDefaults.standard.string(forKey: "aov_viewer_name") ?? ""
     @State private var roomOrLink=""
     @State private var password=""
     @State private var forceRelay=false
+    @State private var renameText=""
     var body:some View {
         NavigationStack {
             ScrollView {
@@ -235,157 +251,255 @@ struct ViewerView:View {
                     }
                     .padding(.top,4)
 
-                    // Card Kết nối
-                    VStack(alignment:.leading,spacing:12) {
-                        // HÀNG 1: Ô NHẬP ID/LINK VÀ Ô NHẬP MẬT KHẨU CÙNG 1 HÀNG
-                        HStack(spacing: 8) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "number")
-                                    .font(.caption2)
-                                    .foregroundStyle(Studio.aqua)
-                                TextField("Nhập ID / Link", text: $roomOrLink)
+                    if !engine.connected {
+                        // ---------------------------------------------------------
+                        // THÔNG BÁO / MÀN HÌNH NHẬP THÔNG TIN VÀO PHÒNG
+                        // ---------------------------------------------------------
+                        VStack(alignment:.leading,spacing:12) {
+                            HStack(spacing:6) {
+                                Image(systemName:"person.crop.circle.badge.plus")
+                                    .font(.subheadline.bold())
+                                    .foregroundStyle(Studio.gold)
+                                Text("VÀO PHÒNG XEM MAP")
+                                    .font(.system(size:13,weight:.bold,design:.rounded))
+                                    .tracking(1)
+                                    .foregroundStyle(.white)
+                            }
+
+                            // 1. Ô NHẬP TÊN NGƯỜI XEM
+                            HStack(spacing:8) {
+                                Image(systemName:"person.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(Studio.gold)
+                                TextField("Tên của bạn...", text:$viewerName)
                                     .font(.subheadline)
-                                    .textInputAutocapitalization(.characters)
                                     .autocorrectionDisabled()
-                                if !roomOrLink.isEmpty {
-                                    Button { roomOrLink = "" } label: {
-                                        Image(systemName: "xmark.circle.fill")
+                                if !viewerName.isEmpty {
+                                    Button { viewerName="" } label: {
+                                        Image(systemName:"xmark.circle.fill")
                                             .font(.caption2)
                                             .foregroundStyle(.secondary)
                                     }
-                                } else {
-                                    Button {
-                                        if let clip = UIPasteboard.general.string {
-                                            roomOrLink = clip.trimmingCharacters(in: .whitespacesAndNewlines)
+                                }
+                            }
+                            .padding(.horizontal,10)
+                            .padding(.vertical,10)
+                            .background(Color.black.opacity(0.45),in:RoundedRectangle(cornerRadius:12))
+                            .overlay(RoundedRectangle(cornerRadius:12).stroke(Color.white.opacity(0.15),lineWidth:1))
+
+                            // 2. Ô NHẬP ID/LINK VÀ MẬT KHẨU CÙNG 1 HÀNG
+                            HStack(spacing:8) {
+                                HStack(spacing:6) {
+                                    Image(systemName:"number")
+                                        .font(.caption2)
+                                        .foregroundStyle(Studio.aqua)
+                                    TextField("Nhập ID / Link", text:$roomOrLink)
+                                        .font(.subheadline)
+                                        .textInputAutocapitalization(.characters)
+                                        .autocorrectionDisabled()
+                                    if !roomOrLink.isEmpty {
+                                        Button { roomOrLink="" } label: {
+                                            Image(systemName:"xmark.circle.fill")
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
                                         }
-                                    } label: {
-                                        Image(systemName: "doc.on.clipboard")
-                                            .font(.caption2)
-                                            .foregroundStyle(Studio.aqua)
+                                    } else {
+                                        Button {
+                                            if let clip=UIPasteboard.general.string {
+                                                roomOrLink=clip.trimmingCharacters(in:.whitespacesAndNewlines)
+                                            }
+                                        } label: {
+                                            Image(systemName:"doc.on.clipboard")
+                                                .font(.caption2)
+                                                .foregroundStyle(Studio.aqua)
+                                        }
                                     }
                                 }
-                            }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 10)
-                            .background(Color.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 12))
-                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.15), lineWidth: 1))
+                                .padding(.horizontal,10)
+                                .padding(.vertical,10)
+                                .background(Color.black.opacity(0.45),in:RoundedRectangle(cornerRadius:12))
+                                .overlay(RoundedRectangle(cornerRadius:12).stroke(Color.white.opacity(0.15),lineWidth:1))
 
-                            HStack(spacing: 6) {
-                                Image(systemName: "lock.fill")
-                                    .font(.caption2)
-                                    .foregroundStyle(Studio.gold)
-                                SecureField("Mật khẩu", text: $password)
-                                    .font(.subheadline)
+                                HStack(spacing:6) {
+                                    Image(systemName:"lock.fill")
+                                        .font(.caption2)
+                                        .foregroundStyle(Studio.gold)
+                                    SecureField("Mật khẩu", text:$password)
+                                        .font(.subheadline)
+                                }
+                                .padding(.horizontal,10)
+                                .padding(.vertical,10)
+                                .frame(width:110)
+                                .background(Color.black.opacity(0.45),in:RoundedRectangle(cornerRadius:12))
+                                .overlay(RoundedRectangle(cornerRadius:12).stroke(Color.white.opacity(0.15),lineWidth:1))
                             }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 10)
-                            .frame(width: 125)
-                            .background(Color.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 12))
-                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.15), lineWidth: 1))
-                        }
 
-                        // HÀNG 2: NÚT VÀO PHÒNG VÀ NÚT CỬA SỔ MAP CÙNG 1 HÀNG
-                        HStack(spacing: 10) {
+                            // 3. NÚT VÀO PHÒNG
                             Button {
-                                Task { await engine.connect(link: roomOrLink, password: password, forceRelay: forceRelay) }
+                                let finalName=viewerName.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty ? "Đồng đội" : viewerName.trimmingCharacters(in:.whitespacesAndNewlines)
+                                viewerName=finalName
+                                renameText=finalName
+                                Task {
+                                    await engine.connect(link:roomOrLink,password:password,name:finalName,forceRelay:forceRelay)
+                                }
                             } label: {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "play.fill")
+                                HStack(spacing:6) {
+                                    Image(systemName:"play.fill")
                                         .font(.caption)
-                                    Text(engine.connected ? "ĐÃ VÀO" : "Vào Phòng")
-                                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                                    Text("Vào Phòng")
+                                        .font(.system(size:15,weight:.bold,design:.rounded))
                                 }
                                 .foregroundStyle(.black)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 46)
+                                .frame(maxWidth:.infinity)
+                                .frame(height:46)
                                 .background(
-                                    LinearGradient(colors: [Studio.gold, Color(red: 1, green: 0.84, blue: 0.38)], startPoint: .topLeading, endPoint: .bottomTrailing),
-                                    in: RoundedRectangle(cornerRadius: 12)
+                                    LinearGradient(colors:[Studio.gold,Color(red:1,green:0.84,blue:0.38)],startPoint:.topLeading,endPoint:.bottomTrailing),
+                                    in:RoundedRectangle(cornerRadius:12)
                                 )
-                                .shadow(color: Studio.gold.opacity(0.35), radius: 6, y: 2)
+                                .shadow(color:Studio.gold.opacity(0.35),radius:6,y:2)
                             }
-                            .disabled(engine.connected)
-                            .opacity(engine.connected ? 0.6 : 1.0)
-
-                            Button {
-                                engine.startPiP()
-                            } label: {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "pip.enter")
-                                        .font(.caption)
-                                    Text(engine.pipActive ? "Đang Mở" : "Cửa Sổ Map")
-                                        .font(.system(size: 15, weight: .bold, design: .rounded))
-                                }
-                                .foregroundStyle(.black)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 46)
-                                .background(
-                                    LinearGradient(colors: [Studio.aqua, Color(red: 0.4, green: 0.85, blue: 1)], startPoint: .topLeading, endPoint: .bottomTrailing),
-                                    in: RoundedRectangle(cornerRadius: 12)
-                                )
-                                .shadow(color: Studio.aqua.opacity(0.35), radius: 6, y: 2)
-                            }
-                            .disabled(!engine.hasFrame || engine.pipActive)
-                            .opacity(!engine.hasFrame || engine.pipActive ? 0.5 : 1.0)
-
-                            if engine.connected {
-                                Button(role: .destructive) {
-                                    engine.stop()
-                                } label: {
-                                    Image(systemName: "xmark")
-                                        .font(.system(size: 14, weight: .bold))
-                                        .foregroundStyle(.red)
-                                        .frame(width: 46, height: 46)
-                                        .background(Color.red.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
-                                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.red.opacity(0.3), lineWidth: 1))
-                                }
-                            }
+                            .disabled(roomOrLink.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty)
+                            .opacity(roomOrLink.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty ? 0.6 : 1.0)
                         }
-                    }
-                    .padding(14)
-                    .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 18))
-                    .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.white.opacity(0.08), lineWidth: 1))
+                        .padding(14)
+                        .background(Color.white.opacity(0.04),in:RoundedRectangle(cornerRadius:18))
+                        .overlay(RoundedRectangle(cornerRadius:18).stroke(Color.white.opacity(0.08),lineWidth:1))
 
-                    // Khung xem trước hình vuông 1:1
-                    VStack(spacing: 8) {
-                        MapPreview(engine:engine)
-                            .aspectRatio(1, contentMode: .fit)
-                            .frame(maxWidth: 260)
-                            .background(.black)
-                            .clipShape(RoundedRectangle(cornerRadius:16))
-                            .overlay(RoundedRectangle(cornerRadius:16).stroke(Studio.aqua.opacity(0.4), lineWidth: 1))
-                            .shadow(color: Studio.aqua.opacity(0.2), radius: 10)
-
-                        HStack {
-                            Circle()
-                                .fill(engine.hasFrame ? Color.green : Color.orange)
-                                .frame(width: 6, height: 6)
+                        if !engine.message.isEmpty && engine.message != "Dán link do máy phát chia sẻ." {
                             Text(engine.message)
                                 .font(.caption.bold())
-                                .foregroundStyle(engine.hasFrame ? Color.green : Studio.aqua)
+                                .foregroundStyle(Studio.aqua)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal)
                         }
-                        if !engine.stats.isEmpty {
-                            Text(engine.stats)
-                                .font(.system(size: 11, design: .monospaced))
-                                .foregroundStyle(.secondary)
+                    } else {
+                        // ---------------------------------------------------------
+                        // GIAO DIỆN CHÍNH (KHI ĐÃ VÀO PHÒNG)
+                        // ---------------------------------------------------------
+                        VStack(alignment:.leading,spacing:12) {
+                            // Ô ĐỔI TÊN BẤT KỲ KHI NÀO
+                            HStack(spacing:8) {
+                                Image(systemName:"person.crop.circle.badge.checkmark")
+                                    .font(.subheadline)
+                                    .foregroundStyle(Studio.gold)
+                                TextField("Tên của bạn...", text:$renameText)
+                                    .font(.subheadline.bold())
+                                    .foregroundStyle(.white)
+                                    .autocorrectionDisabled()
+
+                                let trimmed=renameText.trimmingCharacters(in:.whitespacesAndNewlines)
+                                let canSave = !trimmed.isEmpty && trimmed != engine.viewerName
+
+                                Button {
+                                    engine.rename(trimmed)
+                                } label: {
+                                    Text("Lưu tên")
+                                        .font(.caption.bold())
+                                        .foregroundStyle(.black)
+                                        .padding(.horizontal,12)
+                                        .padding(.vertical,6)
+                                        .background(canSave ? Studio.aqua : Color.gray.opacity(0.4),in:Capsule())
+                                }
+                                .disabled(!canSave)
+                            }
+                            .padding(.horizontal,12)
+                            .padding(.vertical,8)
+                            .background(Color.black.opacity(0.45),in:RoundedRectangle(cornerRadius:12))
+                            .overlay(RoundedRectangle(cornerRadius:12).stroke(Studio.gold.opacity(0.3),lineWidth:1))
+
+                            // HÀNG NÚT: CỬA SỔ MAP VÀ RỜI PHÒNG
+                            HStack(spacing:10) {
+                                Button {
+                                    engine.startPiP()
+                                } label: {
+                                    HStack(spacing:6) {
+                                        Image(systemName:"pip.enter")
+                                            .font(.caption)
+                                        Text(engine.pipActive ? "Đang Mở" : "Cửa Sổ Map")
+                                            .font(.system(size:15,weight:.bold,design:.rounded))
+                                    }
+                                    .foregroundStyle(.black)
+                                    .frame(maxWidth:.infinity)
+                                    .frame(height:46)
+                                    .background(
+                                        LinearGradient(colors:[Studio.aqua,Color(red:0.4,green:0.85,blue:1)],startPoint:.topLeading,endPoint:.bottomTrailing),
+                                        in:RoundedRectangle(cornerRadius:12)
+                                    )
+                                    .shadow(color:Studio.aqua.opacity(0.35),radius:6,y:2)
+                                }
+                                .disabled(!engine.hasFrame || engine.pipActive)
+                                .opacity(!engine.hasFrame || engine.pipActive ? 0.5 : 1.0)
+
+                                Button(role:.destructive) {
+                                    engine.stop()
+                                } label: {
+                                    HStack(spacing:4) {
+                                        Image(systemName:"xmark")
+                                            .font(.caption.bold())
+                                        Text("Rời")
+                                            .font(.system(size:13,weight:.bold,design:.rounded))
+                                    }
+                                    .foregroundStyle(.red)
+                                    .padding(.horizontal,14)
+                                    .frame(height:46)
+                                    .background(Color.red.opacity(0.15),in:RoundedRectangle(cornerRadius:12))
+                                    .overlay(RoundedRectangle(cornerRadius:12).stroke(Color.red.opacity(0.3),lineWidth:1))
+                                }
+                            }
                         }
+                        .padding(14)
+                        .background(Color.white.opacity(0.04),in:RoundedRectangle(cornerRadius:18))
+                        .overlay(RoundedRectangle(cornerRadius:18).stroke(Color.white.opacity(0.08),lineWidth:1))
+
+                        // Khung xem trước hình vuông 1:1
+                        VStack(spacing:8) {
+                            MapPreview(engine:engine)
+                                .aspectRatio(1, contentMode:.fit)
+                                .frame(maxWidth:260)
+                                .background(.black)
+                                .clipShape(RoundedRectangle(cornerRadius:16))
+                                .overlay(RoundedRectangle(cornerRadius:16).stroke(Studio.aqua.opacity(0.4),lineWidth:1))
+                                .shadow(color:Studio.aqua.opacity(0.2),radius:10)
+
+                            HStack {
+                                Circle()
+                                    .fill(engine.hasFrame ? Color.green : Color.orange)
+                                    .frame(width:6,height:6)
+                                Text(engine.message)
+                                    .font(.caption.bold())
+                                    .foregroundStyle(engine.hasFrame ? Color.green : Studio.aqua)
+                            }
+                            if !engine.stats.isEmpty {
+                                Text(engine.stats)
+                                    .font(.system(size:11,design:.monospaced))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .frame(maxWidth:.infinity)
                     }
-                    .frame(maxWidth: .infinity)
 
                     // Hero Art
                     HeroBannerView()
                 }
                 .padding()
             }
+            .animation(.easeInOut(duration:0.25),value:engine.connected)
             .background(LinearGradient(colors:[Studio.background,Color(red:0.01,green:0.08,blue:0.14),Studio.background],startPoint:.topLeading,endPoint:.bottomTrailing).ignoresSafeArea())
             .navigationBarHidden(true)
             .onAppear {
-                if roomOrLink.isEmpty, let clip = UIPasteboard.general.string {
-                    let c = clip.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if c.contains("https://") || (c.count >= 4 && c.count <= 16 && !c.contains(" ")) {
-                        roomOrLink = c
+                if viewerName.isEmpty {
+                    viewerName=UserDefaults.standard.string(forKey:"aov_viewer_name") ?? ""
+                }
+                if roomOrLink.isEmpty, let clip=UIPasteboard.general.string {
+                    let c=clip.trimmingCharacters(in:.whitespacesAndNewlines)
+                    if c.contains("https://") || (c.count>=4 && c.count<=16 && !c.contains(" ")) {
+                        roomOrLink=c
                     }
                 }
+                renameText=engine.viewerName.isEmpty ? viewerName : engine.viewerName
+            }
+            .onChange(of: engine.viewerName) { newName in
+                renameText=newName
             }
         }
     }

@@ -88,8 +88,10 @@ final class LivePeer: NSObject, RTCPeerConnectionDelegate {
     private var operations: [[String: Any]] = []
     private var posting = false
     private var forceRelay: Bool
-    init(server: String, roomID: String, credential: String, publisher: Bool, slot: Int? = nil, fps: Int = 30, maxBitrate: Int = 1200000, forceRelay: Bool = false) {
+    private(set) var viewerName: String = ""
+    init(server: String, roomID: String, credential: String, publisher: Bool, viewerName: String = "", slot: Int? = nil, fps: Int = 30, maxBitrate: Int = 1200000, forceRelay: Bool = false) {
         self.slot = slot ?? 0
+        self.viewerName = viewerName.trimmingCharacters(in: .whitespacesAndNewlines)
         var components=URLComponents(string:"\(server)/api/rooms/\(roomID)/rtc")!
         if let slot=slot {components.queryItems=[URLQueryItem(name:"slot",value:String(slot))]}
         self.endpoint = components.url!
@@ -137,7 +139,15 @@ final class LivePeer: NSObject, RTCPeerConnectionDelegate {
         flushOperations()
         guard !pollBusy else { return }; pollBusy = true
         let op = initialOperation
-        request(op.map { ["op":$0] }) { [weak self] code, data in
+        var opPayload: [String: Any]? = nil
+        if let op = op {
+            var dict: [String: Any] = ["op": op]
+            if op == "join" && !viewerName.isEmpty {
+                dict["name"] = viewerName
+            }
+            opPayload = dict
+        }
+        request(opPayload) { [weak self] code, data in
             guard let self = self else { return }; self.pollBusy = false
             if code == 401 || code == 404 { self.report("Phòng đã đóng hoặc quyền kết nối hết hạn."); self.shutdown(); self.onEnded?(); return }
             guard code == 200, let data = data, let state = try? JSONDecoder().decode(SignalState.self, from: data) else {
@@ -394,6 +404,15 @@ final class LivePeer: NSObject, RTCPeerConnectionDelegate {
                 let delay=rtt.map{String(Int($0*1000))+" ms RTT"} ?? "RTT —"
                 self.onStats?("\(fps) fps • \(delay) • \(relay ? "TURN":"P2P")")
             }
+        }
+    }
+    func rename(_ newName: String) {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        queue.async { [weak self] in
+            guard let self = self, !self.stopped else { return }
+            self.viewerName = trimmed
+            self.send(["op": "rename", "name": trimmed])
         }
     }
     func stop() {queue.async{self.shutdown()}}
