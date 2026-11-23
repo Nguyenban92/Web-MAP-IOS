@@ -28,9 +28,31 @@ final class LivePeer: NSObject, RTCPeerConnectionDelegate {
     private static let factory: RTCPeerConnectionFactory = {
         RTCInitializeSSL()
         let encoder = RTCDefaultVideoEncoderFactory()
-        if let h264 = encoder.supportedCodecs().first(where: { $0.name == "H264" }) { encoder.preferredCodec = h264 }
         return RTCPeerConnectionFactory(encoderFactory: encoder, decoderFactory: RTCDefaultVideoDecoderFactory())
     }()
+    private static let sourceLock = NSLock()
+    private static var sharedSource: RTCVideoSource?
+    private static var sharedCapturer: RTCVideoCapturer?
+    private static var sharedTrack: RTCVideoTrack?
+
+    static func pushFrame(_ buffer: CVPixelBuffer, timeNs: Int64) {
+        sourceLock.lock()
+        guard let source = sharedSource, let cap = sharedCapturer else {
+            sourceLock.unlock()
+            return
+        }
+        sourceLock.unlock()
+        source.capturer(cap, didCapture: RTCVideoFrame(buffer: RTCCVPixelBuffer(pixelBuffer: buffer), rotation: ._0, timeStampNs: timeNs))
+    }
+
+    static func resetSharedSource() {
+        sourceLock.lock()
+        sharedTrack = nil
+        sharedCapturer = nil
+        sharedSource = nil
+        sourceLock.unlock()
+    }
+    let slot: Int
     let publisher: Bool
     var onStatus: ((String) -> Void)?
     var onTrack: ((RTCVideoTrack) -> Void)?
@@ -67,6 +89,7 @@ final class LivePeer: NSObject, RTCPeerConnectionDelegate {
     private var posting = false
     private var forceRelay: Bool
     init(server: String, roomID: String, credential: String, publisher: Bool, slot: Int? = nil, fps: Int = 30, maxBitrate: Int = 1200000, forceRelay: Bool = false) {
+        self.slot = slot ?? 0
         var components=URLComponents(string:"\(server)/api/rooms/\(roomID)/rtc")!
         if let slot=slot {components.queryItems=[URLQueryItem(name:"slot",value:String(slot))]}
         self.endpoint = components.url!
@@ -79,7 +102,7 @@ final class LivePeer: NSObject, RTCPeerConnectionDelegate {
     func start() {
         queue.async {
             guard self.timer == nil, !self.stopped else { return }
-            self.remoteLog("LivePeer start() slot: \(self.endpoint.query ?? "0")")
+            self.remoteLog("LivePeer start() slot: \(self.slot)")
             self.initialOperation = self.publisher ? "reset" : "join"
             let t = DispatchSource.makeTimerSource(queue: self.queue)
             t.schedule(deadline: .now(), repeating: .seconds(1))
@@ -94,7 +117,7 @@ final class LivePeer: NSObject, RTCPeerConnectionDelegate {
         r.httpMethod = "POST"
         r.timeoutInterval = 8
         r.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        r.httpBody = try? JSONSerialization.data(withJSONObject: ["source": "PEER_\(publisher ? "PUB" : "VIEW")_\(endpoint.query ?? "")", "msg": text])
+        r.httpBody = try? JSONSerialization.data(withJSONObject: ["source": "PEER_\(publisher ? "PUB" : "VIEW")_slot=\(slot)", "msg": text])
         session.dataTask(with: r) { _, _, _ in }.resume()
     }
     private func request(_ payload: [String: Any]?, completion: @escaping (Int, Data?) -> Void) {
@@ -211,10 +234,17 @@ final class LivePeer: NSObject, RTCPeerConnectionDelegate {
         guard let peer=Self.factory.peerConnection(with:config,constraints:constraints,delegate:self) else {report("Không tạo được WebRTC.");return}
         pc=peer
         if publisher {
-            let src=Self.factory.videoSource(forScreenCast:true);source=src
-            capturer=RTCVideoCapturer(delegate:src)
-            let video=Self.factory.videoTrack(with:src,trackId:"nb-map-video");track=video
-            sender=peer.add(video,streamIds:["nb-map"])
+            Self.sourceLock.lock()
+            if Self.sharedSource == nil {
+                let src = Self.factory.videoSource(forScreenCast: true)
+                Self.sharedSource = src
+                Self.sharedCapturer = RTCVideoCapturer(delegate: src)
+                Self.sharedTrack = Self.factory.videoTrack(with: src, trackId: "nb-map-video")
+            }
+            let video = Self.sharedTrack!
+            Self.sourceLock.unlock()
+            track = video
+            sender = peer.add(video, streamIds: ["nb-map"])
             tuneSender()
         }
         report("Đang kết nối video trực tiếp…")
@@ -233,41 +263,95 @@ final class LivePeer: NSObject, RTCPeerConnectionDelegate {
             self.queue.async {
                 guard self.pc === peer,!self.stopped else{return}
                 guard error==nil,let sdp=sdp else{self.negotiating=false;self.report("Không tạo được mô tả video.");return}
-                peer.setLocalDescription(sdp) { [weak self,weak peer] error in
+                
+                let rawSDP = sdp.sdp
+                let finalSDP: String
+                if self.publisher && offer {
+                    let preferVP8 = (self.slot >= 2)
+                    finalSDP = Self.reorderSDPCodecs(rawSDP, preferVP8: preferVP8)
+                } else {
+                    finalSDP = rawSDP
+                }
+                
+                let modDesc = RTCSessionDescription(type: sdp.type, sdp: finalSDP)
+                peer.setLocalDescription(modDesc) { [weak self,weak peer] error in
                     guard let self=self,let peer=peer else{return}
                     self.queue.async {
                         guard self.pc === peer,!self.stopped else{return};self.negotiating=false
                         guard error==nil else{self.report("Lỗi thiết lập video cục bộ.");return}
                         self.tuneSender()
-                        self.send(["op":offer ? "offer":"answer","epoch":self.epoch,"sdp":sdp.sdp])
+                        self.send(["op":offer ? "offer":"answer","epoch":self.epoch,"sdp":finalSDP])
                     }
                 }
             }
         }
         if offer {peer.offer(for:constraints,completionHandler:callback)}else{peer.answer(for:constraints,completionHandler:callback)}
     }
-    private func setRemote(_ sdp:String,type:RTCSdpType,peer:RTCPeerConnection) {
-        negotiating=true
-        peer.setRemoteDescription(RTCSessionDescription(type:type,sdp:sdp)) { [weak self,weak peer] error in
-            guard let self=self,let peer=peer else{return}
-            self.queue.async {
-                guard self.pc === peer,!self.stopped else{return};self.negotiating=false
-                guard error==nil else{self.report("Lỗi thương lượng video từ máy bên kia.");return}
-                self.remoteReady=true
-                if !self.publisher {
-                    if let track=peer.receivers.compactMap({$0.track as? RTCVideoTrack}).first {self.onTrack?(track)}
-                    self.makeLocalDescription(offer:false,peer:peer)
+    static func reorderSDPCodecs(_ sdp: String, preferVP8: Bool) -> String {
+        let lines = sdp.components(separatedBy: "\n")
+        var codecs: [String: String] = [:]
+        var apt: [String: String] = [:]
+        
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.hasPrefix("a=rtpmap:") {
+                let rest = String(trimmed.dropFirst(9))
+                let parts = rest.components(separatedBy: " ")
+                if parts.count >= 2 {
+                    let pt = parts[0]
+                    let codecInfo = parts[1].components(separatedBy: "/")
+                    if let name = codecInfo.first {
+                        codecs[pt] = name.uppercased()
+                    }
+                }
+            } else if trimmed.hasPrefix("a=fmtp:") {
+                let rest = String(trimmed.dropFirst(7))
+                let parts = rest.components(separatedBy: " ")
+                if parts.count >= 2 {
+                    let rtxPT = parts[0]
+                    let params = parts[1].components(separatedBy: ";")
+                    for p in params {
+                        let kv = p.trimmingCharacters(in: .whitespaces).components(separatedBy: "=")
+                        if kv.count == 2 && kv[0] == "apt" {
+                            apt[rtxPT] = kv[1]
+                        }
+                    }
                 }
             }
         }
+        
+        let targetCodec = preferVP8 ? "VP8" : "H264"
+        var targetPTs = Set<String>()
+        for (pt, name) in codecs {
+            if name == targetCodec {
+                targetPTs.insert(pt)
+                for (rtxPT, basePT) in apt {
+                    if basePT == pt { targetPTs.insert(rtxPT) }
+                }
+            }
+        }
+        
+        var modifiedLines: [String] = []
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.hasPrefix("m=video ") {
+                let parts = trimmed.components(separatedBy: " ")
+                if parts.count > 3 {
+                    let header = Array(parts[0..<3])
+                    let pts = Array(parts[3...])
+                    let preferred = pts.filter { targetPTs.contains($0) }
+                    let rest = pts.filter { !targetPTs.contains($0) }
+                    let newLine = (header + preferred + rest).joined(separator: " ")
+                    modifiedLines.append(newLine)
+                    continue
+                }
+            }
+            modifiedLines.append(trimmed)
+        }
+        return modifiedLines.joined(separator: "\r\n") + "\r\n"
     }
     func push(_ buffer:CVPixelBuffer,timeNs:Int64) {
-        mediaLock.lock();if mediaPending{mediaLock.unlock();return};mediaPending=true;mediaLock.unlock()
-        queue.async {
-            defer{self.mediaLock.lock();self.mediaPending=false;self.mediaLock.unlock()}
-            guard !self.stopped,let source=self.source,let cap=self.capturer else{return}
-            source.capturer(cap,didCapture:RTCVideoFrame(buffer:RTCCVPixelBuffer(pixelBuffer:buffer),rotation:._0,timeStampNs:timeNs))
-        }
+        Self.pushFrame(buffer, timeNs: timeNs)
     }
     private func readStats() {
         guard let peer=pc else{return}

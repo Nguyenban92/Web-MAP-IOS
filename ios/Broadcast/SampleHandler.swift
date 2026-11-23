@@ -192,6 +192,7 @@ class SampleHandler: RPBroadcastSampleHandler {
         self.config = nil
         lock.unlock()
         oldPeers.forEach { $0.stop() }
+        LivePeer.resetSharedSource()
         startWithConfig(c)
     }
 
@@ -203,6 +204,7 @@ class SampleHandler: RPBroadcastSampleHandler {
         self.peers = []
         lock.unlock()
         oldPeers.forEach { $0.stop() }
+        LivePeer.resetSharedSource()
         remoteLog("handlePeerEnded() room \(roomID) ended, re-pairing in 1.5s...")
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
             self?.tryAutoPair()
@@ -280,7 +282,7 @@ class SampleHandler: RPBroadcastSampleHandler {
                 hasLoggedFirstFrame = true
                 remoteLog("processSampleBuffer() 1st frame rendered and pushed! size: \(w)x\(h)")
             }
-            peers.forEach { $0.push(output, timeNs: Int64(now * 1_000_000_000)) }
+            LivePeer.pushFrame(output, timeNs: Int64(now * 1_000_000_000))
         }
     }
 
@@ -303,15 +305,14 @@ class SampleHandler: RPBroadcastSampleHandler {
         return buffer
     }
 
-    private func sendBlack(_ peer: LivePeer, now: Double) {
+    private func sendBlack(now: Double) {
         guard let output = pixel(width: max(2, poolWidth), height: max(2, poolHeight)) else { return }
         context.render(CIImage(color: .black).cropped(to: CGRect(x: 0, y: 0, width: CVPixelBufferGetWidth(output), height: CVPixelBufferGetHeight(output))), to: output)
-        peer.push(output, timeNs: Int64(now * 1_000_000_000))
+        LivePeer.pushFrame(output, timeNs: Int64(now * 1_000_000_000))
     }
 
     override func broadcastPaused() {
-        lock.lock(); let p = peers; lock.unlock()
-        p.forEach { sendBlack($0, now: ProcessInfo.processInfo.systemUptime) }
+        sendBlack(now: ProcessInfo.processInfo.systemUptime)
     }
 
     override func broadcastResumed() {}
@@ -321,6 +322,7 @@ class SampleHandler: RPBroadcastSampleHandler {
         syncTimer?.cancel(); syncTimer = nil
         lock.lock(); active = false; let p = peers; peers = []; config = nil; lock.unlock()
         p.forEach { $0.stop() }
+        LivePeer.resetSharedSource()
         pool = nil
         context.clearCaches()
     }

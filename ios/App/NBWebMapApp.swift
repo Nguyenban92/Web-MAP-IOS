@@ -2,6 +2,7 @@ import SwiftUI
 import PhotosUI
 import ReplayKit
 import CoreImage.CIFilterBuiltins
+import AVFoundation
 
 @main
 struct NBWebMapApp: App {
@@ -40,6 +41,7 @@ final class AppModel: ObservableObject {
     @Published var viewersCount: Int = 0
     @Published var maxViewers: Int = 6
     @Published var viewerNames: [String] = []
+    private var announcedViewerKeys = Set<String>()
     
     static let calibratedCrop = Crop(x: 0.055, y: 0.002, width: 0.144, height: 0.311, referenceAspect: 2.165, rotate180: true, version: 3)
     
@@ -118,9 +120,25 @@ final class AppModel: ObservableObject {
         self.maxViewers = maxV
         self.viewersCount = viewers
         if let rawList = v["viewerList"] as? [[String: Any]] {
-            self.viewerNames = rawList.compactMap { $0["name"] as? String }
+            var currentKeys = Set<String>()
+            var names: [String] = []
+            for item in rawList {
+                let name = item["name"] as? String ?? ""
+                let slot = item["slot"] as? Int ?? -1
+                if !name.isEmpty {
+                    names.append(name)
+                    let key = "\(slot):\(name)"
+                    currentKeys.insert(key)
+                    if !self.announcedViewerKeys.contains(key) {
+                        VoiceAnnouncer.shared.speakJoined(name: name)
+                    }
+                }
+            }
+            self.announcedViewerKeys = currentKeys
+            self.viewerNames = names
         } else {
             self.viewerNames = []
+            self.announcedViewerKeys.removeAll()
         }
         self.isPublisherLive = pubOnline
         if live > 0 {
@@ -767,5 +785,29 @@ struct PairingPanel: View {
             Text("Bấm biểu tượng → chọn Ma Giáo Live Map Broadcast. Giữ màn hình này đến khi báo Đã ghép nối. Mã dùng một lần, hết hạn sau 90 giây.").font(.caption)
             Text(status).font(.caption).foregroundStyle(.mint)
         }.frame(maxWidth: .infinity)
+    }
+}
+
+final class VoiceAnnouncer: NSObject {
+    static let shared = VoiceAnnouncer()
+    private let synth = AVSpeechSynthesizer()
+    
+    func speakJoined(name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let text = "\(trimmed) Lỏ đã vào phòng"
+        DispatchQueue.main.async {
+            try? AVAudioSession.sharedInstance().setCategory(.playback, options: [.mixWithOthers, .duckOthers])
+            try? AVAudioSession.sharedInstance().setActive(true)
+            let utterance = AVSpeechUtterance(string: text)
+            if let viVoice = AVSpeechSynthesisVoice(language: "vi-VN") {
+                utterance.voice = viVoice
+            } else {
+                utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+            }
+            utterance.rate = AVSpeechUtteranceDefaultSpeechRate
+            utterance.pitchMultiplier = 1.0
+            self.synth.speak(utterance)
+        }
     }
 }

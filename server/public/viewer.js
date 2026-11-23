@@ -87,6 +87,7 @@ function stop() {
   $('join').hidden = false;
   if ($('viewerHUD')) $('viewerHUD').hidden = true;
   mySlot = -1;
+  knownViewerKeys.clear();
   badge('ĐÃ DỪNG');
   message('Đã dừng');
   if (grant && hasJoined) api('rtc', { op: 'leave' }).catch(() => {});
@@ -260,6 +261,41 @@ function escapeHtml(str) {
   return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+const knownViewerKeys = new Set();
+
+function speakJoined(name) {
+  if (!('speechSynthesis' in window) || !name) return;
+  try {
+    window.speechSynthesis.resume?.();
+    const text = `${name.trim()} Lỏ đã vào phòng`;
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'vi-VN';
+    u.rate = 1.0;
+    u.pitch = 1.0;
+    const voices = window.speechSynthesis.getVoices();
+    const vi = voices.find(v => v.lang && v.lang.toLowerCase().replace('_', '-').startsWith('vi'));
+    if (vi) u.voice = vi;
+    window.speechSynthesis.speak(u);
+  } catch (err) {
+    console.warn('Speech synthesis error:', err);
+  }
+}
+
+function announceViewers(viewerList) {
+  if (!Array.isArray(viewerList)) return;
+  const currentKeys = new Set();
+  viewerList.forEach(v => {
+    if (!v.name) return;
+    const key = `${v.slot}:${v.name.trim()}`;
+    currentKeys.add(key);
+    if (!knownViewerKeys.has(key)) {
+      speakJoined(v.name);
+    }
+  });
+  knownViewerKeys.clear();
+  currentKeys.forEach(k => knownViewerKeys.add(k));
+}
+
 function updateViewerHUD(state) {
   const hud = $('viewerHUD');
   if (!hud) return;
@@ -272,6 +308,8 @@ function updateViewerHUD(state) {
   const max = state.maxViewers || 6;
   const countLabel = $('viewerCountLabel');
   if (countLabel) countLabel.textContent = `${count}/${max} NGƯỜI XEM`;
+
+  announceViewers(state.viewerList);
 
   const listEl = $('viewerChipList');
   if (listEl && Array.isArray(state.viewerList)) {
@@ -387,6 +425,9 @@ async function connectWithPassword(pwd = '', customName = '') {
 
 $('join').addEventListener('submit', async e => {
   e.preventDefault();
+  if ('speechSynthesis' in window) {
+    try { window.speechSynthesis.resume?.(); } catch {}
+  }
   const nameVal = $('viewerName') ? $('viewerName').value.trim() : '';
   if (!nameVal) {
     if ($('viewerName')) $('viewerName').focus();
@@ -466,3 +507,11 @@ function updateRoomState() {
 
 window.addEventListener('hashchange', updateRoomState);
 updateRoomState();
+
+if ('speechSynthesis' in window) {
+  try {
+    window.speechSynthesis.onvoiceschanged = () => {
+      try { window.speechSynthesis.getVoices(); } catch {}
+    };
+  } catch {}
+}
