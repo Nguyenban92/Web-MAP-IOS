@@ -132,7 +132,15 @@ final class LivePeer: NSObject, RTCPeerConnectionDelegate {
     }
     private func tick() {
         guard !stopped else { return }
-        if Date().timeIntervalSince(signalSuccess)>15 {
+        // Only force re-join if we have NEVER had a successful signal AND
+        // the peer connection itself is not already connected/completed.
+        // This avoids resetting a healthy connection just because the HTTP poll
+        // was slow (Render.com cold-start, 4G latency spike, etc.).
+        let peerConnected: Bool = {
+            guard let pc = self.pc else { return false }
+            return pc.iceConnectionState == .connected || pc.iceConnectionState == .completed
+        }()
+        if !peerConnected && Date().timeIntervalSince(signalSuccess) > 20 {
             report("Đang kết nối lại máy chủ...")
             self.initialOperation = self.publisher ? "reset" : "join"
         }
@@ -428,7 +436,12 @@ final class LivePeer: NSObject, RTCPeerConnectionDelegate {
     func peerConnection(_ peerConnection:RTCPeerConnection,didChange newState:RTCIceConnectionState) {
         queue.async {
             guard self.pc === peerConnection,!self.stopped else{return}
-            if newState == .connected || newState == .completed {self.report("Video trực tiếp đã kết nối");self.badSince=nil}
+            if newState == .connected || newState == .completed {
+                self.report("Video trực tiếp đã kết nối")
+                self.badSince=nil
+                // Reset signalSuccess so the 20s watchdog doesn't fire while streaming
+                self.signalSuccess=Date()
+            }
             else if newState == .failed {self.report(self.relayAvailable ? "Mất kết nối, đang khôi phục…":"Không xuyên được mạng. Cần TURN hoặc đổi mạng.")}
             else if newState == .disconnected {self.report("Đường truyền gián đoạn, đang khôi phục…")}
         }

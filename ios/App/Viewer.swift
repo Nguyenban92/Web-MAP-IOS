@@ -82,6 +82,7 @@ final class ViewerEngine:NSObject,ObservableObject,AVPictureInPictureControllerD
     private var track:RTCVideoTrack?
     private var connectionID=UUID()
     private var lastFrame=Date.distantPast
+    private var lastPixelBuffer:CVPixelBuffer?
     private var timer:Timer?
     private var leaveURL:URL?
     private var accessToken=""
@@ -100,6 +101,8 @@ final class ViewerEngine:NSObject,ObservableObject,AVPictureInPictureControllerD
         }
         sink.onFrame = { [weak self] pixel in
             guard let self=self,self.connected,!self.paused else{return}
+            // Keep last good frame reference for freeze-frame during jitter
+            self.lastPixelBuffer = pixel
             self.enqueue(pixel);self.lastFrame=Date();self.hasFrame=true
         }
     }
@@ -107,6 +110,17 @@ final class ViewerEngine:NSObject,ObservableObject,AVPictureInPictureControllerD
         var timebase:CMTimebase?
         CMTimebaseCreateWithSourceClock(allocator:kCFAllocatorDefault,sourceClock:CMClockGetHostTimeClock(),timebaseOut:&timebase)
         if let t=timebase {layer.controlTimebase=t;CMTimebaseSetTime(t,time:CMClockGetTime(CMClockGetHostTimeClock()));CMTimebaseSetRate(t,rate:1)}
+    }
+    // Full reset when layer enters .failed state — flush() alone does NOT clear the failure
+    private static func recoverLayer(_ layer:AVSampleBufferDisplayLayer) {
+        layer.flush()
+        var timebase:CMTimebase?
+        CMTimebaseCreateWithSourceClock(allocator:kCFAllocatorDefault,sourceClock:CMClockGetHostTimeClock(),timebaseOut:&timebase)
+        if let t=timebase {
+            layer.controlTimebase=t
+            CMTimebaseSetTime(t,time:CMClockGetTime(CMClockGetHostTimeClock()))
+            CMTimebaseSetRate(t,rate:1)
+        }
     }
     func connect(link:String,password:String,name:String = "",forceRelay:Bool=false) async {
         stop();let attempt=connectionID
@@ -168,7 +182,9 @@ final class ViewerEngine:NSObject,ObservableObject,AVPictureInPictureControllerD
             peer=p;p.start()
             timer=Timer.scheduledTimer(withTimeInterval:1,repeats:true){ [weak self] _ in
                 guard let self=self,self.connected else{return}
-                if Date().timeIntervalSince(self.lastFrame)>3 {self.blank()}
+                // 15s without a frame: freeze last-good frame or show black.
+                // 3s was far too aggressive for mobile network jitter.
+                if Date().timeIntervalSince(self.lastFrame)>15 {self.blank()}
             }
         }catch{if attempt==connectionID{message=error.localizedDescription}}
     }
@@ -187,12 +203,20 @@ final class ViewerEngine:NSObject,ObservableObject,AVPictureInPictureControllerD
         var sample:CMSampleBuffer?
         guard CMSampleBufferCreateReadyWithImageBuffer(allocator:kCFAllocatorDefault,imageBuffer:pixel,formatDescription:format,sampleTiming:&timing,sampleBufferOut:&sample)==noErr,let sample=sample else{return}
         for display in [surface.display,pipViewController.videoSurface.display] {
-            if display.status == .failed{display.flush()}
+            // If layer entered failed state, do a full timebase reset to unblock it
+            if display.status == .failed { Self.recoverLayer(display) }
             if display.isReadyForMoreMediaData{display.enqueue(sample)}
         }
     }
+    // Called when stream is silent for too long: freeze the last good frame if available,
+    // or fall back to a black frame. This prevents jarring black flashes during jitter.
     private func blank() {
-        hasFrame=false;surface.display.flushAndRemoveImage();pipViewController.videoSurface.display.flushAndRemoveImage()
+        hasFrame=false
+        // If we have a saved last-good frame, freeze it (don't go black during jitter)
+        if let last=lastPixelBuffer { enqueue(last); return }
+        // No saved frame: draw a black placeholder and reset layers
+        surface.display.flushAndRemoveImage()
+        pipViewController.videoSurface.display.flushAndRemoveImage()
         var buffer:CVPixelBuffer?
         guard CVPixelBufferCreate(kCFAllocatorDefault,240,240,kCVPixelFormatType_32BGRA,[kCVPixelBufferIOSurfacePropertiesKey as String:[:]] as CFDictionary,&buffer)==kCVReturnSuccess,let buffer=buffer else{return}
         imageContext.render(CIImage(color:.black).cropped(to:CGRect(x:0,y:0,width:240,height:240)),to:buffer);enqueue(buffer)
@@ -204,7 +228,7 @@ final class ViewerEngine:NSObject,ObservableObject,AVPictureInPictureControllerD
     }
     func stop() {
         connectionID=UUID();connected=false;paused=false;peer?.stop();peer=nil
-        track?.remove(sink);track=nil;timer?.invalidate();timer=nil
+        track?.remove(sink);track=nil;timer?.invalidate();timer=nil;lastPixelBuffer=nil
         if let url=leaveURL,!accessToken.isEmpty {
             var r=URLRequest(url:url);r.httpMethod="POST";r.timeoutInterval=3
             r.setValue("Bearer \(accessToken)",forHTTPHeaderField:"Authorization");r.setValue("application/json",forHTTPHeaderField:"Content-Type")

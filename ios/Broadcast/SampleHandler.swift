@@ -12,6 +12,8 @@ class SampleHandler: RPBroadcastSampleHandler {
     private var peers: [LivePeer] = []
     private var lastFrame = 0.0
     private var lastBlack = 0.0
+    private var lastHeartbeatFrame = 0.0  // tracks when we last re-sent the freeze frame
+    private var lastRenderedPixel: CVPixelBuffer?  // last rendered map crop, for heartbeat
     private var pool: CVPixelBufferPool?
     private var poolWidth = 0
     private var poolHeight = 0
@@ -51,21 +53,40 @@ class SampleHandler: RPBroadcastSampleHandler {
     
     private func startSyncTimer() {
         let t = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .userInitiated))
-        t.schedule(deadline: .now() + 2.0, repeating: .seconds(10))
+        // Fire every 2s: handles both server sync AND heartbeat frame injection
+        t.schedule(deadline: .now() + 2.0, repeating: .seconds(2))
         t.setEventHandler { [weak self] in
             guard let self = self else { return }
             self.lock.lock()
             let isRunning = self.active
             let currentRoomID = self.config?.room.id
+            let now = ProcessInfo.processInfo.systemUptime
+            let timeSinceLastFrame = now - self.lastFrame
+            let timeSinceHeartbeat = now - self.lastHeartbeatFrame
+            let lastPixel = self.lastRenderedPixel
             self.lock.unlock()
             guard isRunning else { return }
-            
+
             if currentRoomID == nil {
                 self.tryAutoPair()
                 return
             }
-            
-            self.checkServerAutoPair(currentRoomID: currentRoomID)
+
+            // Heartbeat: when ReplayKit stops delivering frames (e.g. static game screen),
+            // re-send the last rendered frame every 2s so viewers never see a 3+s gap.
+            // This is the primary fix for "xem được 1 tí là đen màn hình".
+            if timeSinceLastFrame > 1.5 && timeSinceHeartbeat > 1.8, let pixel = lastPixel {
+                self.lock.lock()
+                self.lastHeartbeatFrame = now
+                self.lock.unlock()
+                LivePeer.pushFrame(pixel, timeNs: Int64(now * 1_000_000_000))
+            }
+
+            // Server sync check every ~10s (every 5th tick at 2s interval)
+            let tickCount = Int(now / 2)
+            if tickCount % 5 == 0 {
+                self.checkServerAutoPair(currentRoomID: currentRoomID)
+            }
         }
         self.syncTimer = t
         t.resume()
@@ -282,6 +303,11 @@ class SampleHandler: RPBroadcastSampleHandler {
                 hasLoggedFirstFrame = true
                 remoteLog("processSampleBuffer() 1st frame rendered and pushed! size: \(w)x\(h)")
             }
+            // Save last rendered pixel for heartbeat re-send when screen is static
+            self.lock.lock()
+            self.lastRenderedPixel = output
+            self.lastHeartbeatFrame = now
+            self.lock.unlock()
             LivePeer.pushFrame(output, timeNs: Int64(now * 1_000_000_000))
         }
     }
@@ -320,7 +346,7 @@ class SampleHandler: RPBroadcastSampleHandler {
     override func broadcastFinished() {
         remoteLog("broadcastFinished() called")
         syncTimer?.cancel(); syncTimer = nil
-        lock.lock(); active = false; let p = peers; peers = []; config = nil; lock.unlock()
+        lock.lock(); active = false; let p = peers; peers = []; config = nil; lastRenderedPixel = nil; lock.unlock()
         p.forEach { $0.stop() }
         LivePeer.resetSharedSource()
         pool = nil
